@@ -1,0 +1,102 @@
+{
+  "version": "1.0.2",
+  "name": "@ihmeuw/scrollyteller",
+  "description": "A JavaScript library to build scrollytelling visualizations from tabular data",
+  "main": "dist/lib.js",
+  "scripts": {
+    "prepare": "npm run build:umd",
+    "build:umd": "NODE_ENV='build' $(npm bin)/babel-node $(npm bin)/webpack --progress --colors",
+    "build:dev": "NODE_ENV='development' $(npm bin)/babel-node $(npm bin)/webpack --progress --colors",
+    "build:prod": "NODE_ENV='production' $(npm bin)/babel-node $(npm bin)/webpack --progress --colors",
+    "build:watch": "NODE_ENV='development' $(npm bin)/babel-node $(npm bin)/webpack --progress --colors --watch"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ihmeuw/ScrollyTeller"
+  },
+  "keywords": [
+    "scrollytelling",
+    "scroll",
+    "story"
+  ],
+  "author": "Ryan Shackleton <ryan.shackleton@gmail.com>",
+  "contributors": [
+    "Kat Beame <kbeame@uw.edu>",
+    "Evan Laurie <evanl5@wu.edu>",
+    "Aaron Keel <akeel@uw.edu>"
+  ],
+  "license": "BSD-3-Clause",
+  "homepage": "https://ihmeuw.github.io/ScrollyTeller/",
+  "bugs": {
+    "url": "https://github.com/ihmeuw/ScrollyTeller/issues"
+  },
+  "files": [
+    "dist/*",
+    "!dist/images",
+    "src/"
+  ],
+  "browserslist": [
+    "last 2 versions"
+  ],
+  "devDependencies": {
+    "@babel/cli": "^7.7.0",
+    "@babel/core": "^7.7.0",
+    "@babel/node": "^7.7.0",
+    "@babel/plugin-proposal-class-properties": "^7.7.0",
+    "@babel/plugin-proposal-object-rest-spread": "^7.6.2",
+    "@babel/polyfill": "^7.7.0",
+    "@babel/preset-env": "^7.7.1",
+    "@babel/preset-react": "^7.7.0",
+    "autoprefixer": "^9.7.1",
+    "babel-eslint": "^10.0.3",
+    "babel-loader": "^8.0.6",
+    "babel-minify-webpack-plugin": "^0.3.1",
+    "babel-plugin-add-module-exports": "^1.0.0",
+    "babel-plugin-import": "^1.12.2",
+    "browser-sync": "^2.26.7",
+    "browser-sync-webpack-plugin": "^2.2.2",
+    "css-loader": "^3.2.0",
+    "csv-loader": "^3.0.2",
+    "eslint": "^6.6.0",
+    "eslint-config-airbnb": "^18.0.1",
+    "eslint-import-resolver-webpack": "^0.11.1",
+    "eslint-loader": "^3.0.2",
+    "eslint-plugin-import": "^2.18.2",
+    "eslint-plugin-jsx": "^0.1.0",
+    "eslint-plugin-jsx-a11y": "^6.2.3",
+    "eslint-plugin-react": "^7.16.0",
+    "file-loader": "^4.2.0",
+    "less": "^3.10.3",
+    "less-loader": "^5.0.0",
+    "mini-css-extract-plugin": "^0.8.0",
+    "node-babel": "^0.1.2",
+    "node-sass": "^4.13.0",
+    "papaparse": "^5.1.0",
+    "postcss-loader": "^3.0.0",
+    "sass-loader": "^8.0.0",
+    "webpack": "^4.41.2",
+    "webpack-bundle-analyzer": "^3.6.0",
+    "webpack-cli": "^3.3.10",
+    "webpack-config": "^7.5.0",
+    "webpack-notifier": "^1.8.0"
+  },
+  "dependencies": {
+    "babel-polyfill": "^6.26.0",
+    "d3-array": "^2.3.3",
+    "d3-axis": "^1.0.12",
+    "d3-fetch": "^1.1.2",
+    "d3-interpolate": "^1.3.2",
+    "d3-scale": "^3.2.0",
+    "d3-scale-chromatic": "^1.5.0",
+    "d3-selection": "^1.4.0",
+    "d3-selection-multi": "^1.0.1",
+    "d3-svg-legend": "^2.25.6",
+    "element-resize-detector": "^1.1.14",
+    "intersection-observer": "^0.7.0",
+    "intersection-observer-polyfill": "^0.1.0",
+    "lodash-es": "^4.17.15",
+    "scroll-into-view": "^1.12.2",
+    "scrollama": "^2.1.2",
+    "whatwg-fetch": "^3.0.0"
+  }
+}
