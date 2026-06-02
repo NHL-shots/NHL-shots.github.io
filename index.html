@@ -1,3 +1,4 @@
+<!-- index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -11,22 +12,87 @@
 </head>
 <body>
     <div class="hero-section">
-        <h1>🏒 NHL Shot Analysis 2025</h1>
-        <div class="hero-controls">
-            <label for="hero-filter">Filter shots: </label>
-            <select id="hero-filter">
-                <option value="all">All Shots</option>
-                <option value="goals">Goals Only</option>
-                <option value="non-goals">Missed/Saved Only</option>
-            </select>
+        <h1 class="hero-title">🏒 NHL Shot Analysis 2025</h1>
+        <div class="hero-body">
+            <!-- Left sidebar with filters (dark blue) -->
+            <aside class="hero-sidebar">
+                <div class="hero-controls">
+                    <!-- ===== DROPDOWNS (comboboxes) ===== -->
+                    <div class="filter-group">
+                        <label for="hero-shottype">Shot Type</label>
+                        <select id="hero-shottype">
+                            <option value="all">All Types</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="hero-season">Season</label>
+                        <select id="hero-season">
+                            <option value="all">All Seasons</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="hero-period">Period</label>
+                        <select id="hero-period">
+                            <option value="all">All Periods</option>
+                        </select>
+                    </div>
+
+                    <!-- ===== RADIO BUTTONS ===== -->
+                    <div class="filter-group">
+                        <label>Shot Result</label>
+                        <div class="radio-group">
+                            <label><input type="radio" name="goal-result" value="all" checked> All</label>
+                            <label><input type="radio" name="goal-result" value="goals"> Goals</label>
+                            <label><input type="radio" name="goal-result" value="non-goals"> Missed/Saved</label>
+                        </div>
+                    </div>
+                    <div class="filter-group">
+                        <label>Playoff Game</label>
+                        <div class="radio-group">
+                            <label><input type="radio" name="playoff" value="all" checked> All</label>
+                            <label><input type="radio" name="playoff" value="true"> Yes</label>
+                            <label><input type="radio" name="playoff" value="false"> No</label>
+                        </div>
+                    </div>
+                    <div class="filter-group">
+                        <label>Shooter Hand</label>
+                        <div class="radio-group">
+                            <label><input type="radio" name="hand" value="all" checked> All</label>
+                            <label><input type="radio" name="hand" value="L"> Left</label>
+                            <label><input type="radio" name="hand" value="R"> Right</label>
+                        </div>
+                    </div>
+
+                    <!-- ===== SEARCH INPUTS (with datalist) ===== -->
+                    <div class="filter-group">
+                        <label for="hero-shooter">Shooter Name</label>
+                        <input type="text" id="hero-shooter" list="shooter-list" placeholder="Search shooter...">
+                        <datalist id="shooter-list"></datalist>
+                    </div>
+                    <div class="filter-group">
+                        <label for="hero-goalie">Goalie Name</label>
+                        <input type="text" id="hero-goalie" list="goalie-list" placeholder="Search goalie...">
+                        <datalist id="goalie-list"></datalist>
+                    </div>
+                    <div class="filter-group">
+                        <label for="hero-team">Team</label>
+                        <input type="text" id="hero-team" list="team-list" placeholder="Search team...">
+                        <datalist id="team-list"></datalist>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Chart area (smaller, centered) -->
+            <div class="hero-chart-container">
+                <div id="hero-chart"></div>
+            </div>
         </div>
-        <div id="hero-chart"></div>
     </div>
 
     <!-- ScrollyTeller: narration LEFT, graph RIGHT -->
     <div id="scrollyteller-app" class="scrollyteller">
-        <div class="scrollyteller__narration"></div>   <!-- LEFT: scrolling text -->
-        <div id="st-graph" class="scrollyteller__graph"></div>   <!-- RIGHT: sticky graph -->
+        <div class="scrollyteller__narration"></div>
+        <div id="st-graph" class="scrollyteller__graph"></div>
     </div>
 
     <script src="main.js"></script>
