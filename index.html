@@ -1,10 +1,11 @@
-<!-- index.html -->
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hockey ScrollyTeller</title>
+    <title>Análisis de Tiros NHL 2025</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <link rel="stylesheet" href="styles.css">
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <script src="https://unpkg.com/scrollama"></script>
@@ -12,87 +13,143 @@
 </head>
 <body>
     <div class="hero-section">
-        <h1 class="hero-title">🏒 NHL Shot Analysis 2025</h1>
         <div class="hero-body">
-            <!-- Left sidebar with filters (dark blue) -->
             <aside class="hero-sidebar">
+                <h1 class="hero-title">Análisis de Tiros NHL 2025</h1>
                 <div class="hero-controls">
-                    <!-- ===== DROPDOWNS (comboboxes) ===== -->
+                    <!-- DROPDOWNS -->
                     <div class="filter-group">
-                        <label for="hero-shottype">Shot Type</label>
-                        <select id="hero-shottype">
-                            <option value="all">All Types</option>
+                        <label for="hero-shottype">Tipo de Tiro</label>
+                        <select id="hero-shottype" class="form-select form-select-sm">
+                            <option value="all">Todos los tipos</option>
                         </select>
                     </div>
                     <div class="filter-group">
-                        <label for="hero-season">Season</label>
-                        <select id="hero-season">
-                            <option value="all">All Seasons</option>
+                        <label for="hero-season">Temporada</label>
+                        <select id="hero-season" class="form-select form-select-sm">
+                            <option value="all">Todas las temporadas</option>
                         </select>
                     </div>
                     <div class="filter-group">
-                        <label for="hero-period">Period</label>
-                        <select id="hero-period">
-                            <option value="all">All Periods</option>
+                        <label for="hero-period">Periodo</label>
+                        <select id="hero-period" class="form-select form-select-sm">
+                            <option value="all">Todos los periodos</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="hero-onicesituation">Situación en Hielo</label>
+                        <select id="hero-onicesituation" class="form-select form-select-sm">
+                            <option value="all">Todas</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="hero-shooterposition">Posición del Tirador</label>
+                        <select id="hero-shooterposition" class="form-select form-select-sm">
+                            <option value="all">Todas</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="hero-shotoutcome">Resultado del Tiro (Detalle)</label>
+                        <select id="hero-shotoutcome" class="form-select form-select-sm">
+                            <option value="all">Todos</option>
                         </select>
                     </div>
 
-                    <!-- ===== RADIO BUTTONS ===== -->
+                    <hr>
+
+                    <!-- RADIO BUTTONS -->
                     <div class="filter-group">
-                        <label>Shot Result</label>
-                        <div class="radio-group">
-                            <label><input type="radio" name="goal-result" value="all" checked> All</label>
-                            <label><input type="radio" name="goal-result" value="goals"> Goals</label>
-                            <label><input type="radio" name="goal-result" value="non-goals"> Missed/Saved</label>
+                        <label>Resultado del Tiro</label>
+                        <div class="btn-group w-100" role="group">
+                            <input type="radio" class="btn-check" name="goal-result" value="all" id="goal-all" checked>
+                            <label class="btn btn-outline-light btn-sm" for="goal-all">Todos</label>
+                            <input type="radio" class="btn-check" name="goal-result" value="goals" id="goal-goals">
+                            <label class="btn btn-outline-light btn-sm" for="goal-goals">Goles</label>
+                            <input type="radio" class="btn-check" name="goal-result" value="non-goals" id="goal-missed">
+                            <label class="btn btn-outline-light btn-sm" for="goal-missed">Fallados/Atajados</label>
                         </div>
                     </div>
                     <div class="filter-group">
-                        <label>Playoff Game</label>
-                        <div class="radio-group">
-                            <label><input type="radio" name="playoff" value="all" checked> All</label>
-                            <label><input type="radio" name="playoff" value="true"> Yes</label>
-                            <label><input type="radio" name="playoff" value="false"> No</label>
+                        <label>Mano del Tirador</label>
+                        <div class="btn-group w-100" role="group">
+                            <input type="radio" class="btn-check" name="hand" value="all" id="hand-all" checked>
+                            <label class="btn btn-outline-light btn-sm" for="hand-all">Todos</label>
+                            <input type="radio" class="btn-check" name="hand" value="L" id="hand-left">
+                            <label class="btn btn-outline-light btn-sm" for="hand-left">Izquierda</label>
+                            <input type="radio" class="btn-check" name="hand" value="R" id="hand-right">
+                            <label class="btn btn-outline-light btn-sm" for="hand-right">Derecha</label>
                         </div>
                     </div>
                     <div class="filter-group">
-                        <label>Shooter Hand</label>
-                        <div class="radio-group">
-                            <label><input type="radio" name="hand" value="all" checked> All</label>
-                            <label><input type="radio" name="hand" value="L"> Left</label>
-                            <label><input type="radio" name="hand" value="R"> Right</label>
+                        <label>Partido de Playoff</label>
+                        <div class="btn-group w-100" role="group">
+                            <input type="radio" class="btn-check" name="playoff" value="all" id="playoff-all" checked>
+                            <label class="btn btn-outline-light btn-sm" for="playoff-all">Todos</label>
+                            <input type="radio" class="btn-check" name="playoff" value="true" id="playoff-yes">
+                            <label class="btn btn-outline-light btn-sm" for="playoff-yes">Sí</label>
+                            <input type="radio" class="btn-check" name="playoff" value="false" id="playoff-no">
+                            <label class="btn btn-outline-light btn-sm" for="playoff-no">No</label>
                         </div>
                     </div>
 
-                    <!-- ===== SEARCH INPUTS (with datalist) ===== -->
+                    <hr>
+
+                    <!-- BÚSQUEDAS -->
                     <div class="filter-group">
-                        <label for="hero-shooter">Shooter Name</label>
-                        <input type="text" id="hero-shooter" list="shooter-list" placeholder="Search shooter...">
+                        <label for="hero-shooter">Nombre del Tirador</label>
+                        <input type="text" id="hero-shooter" list="shooter-list" class="form-control form-control-sm" placeholder="Buscar tirador...">
                         <datalist id="shooter-list"></datalist>
                     </div>
                     <div class="filter-group">
-                        <label for="hero-goalie">Goalie Name</label>
-                        <input type="text" id="hero-goalie" list="goalie-list" placeholder="Search goalie...">
+                        <label for="hero-goalie">Nombre del Portero</label>
+                        <input type="text" id="hero-goalie" list="goalie-list" class="form-control form-control-sm" placeholder="Buscar portero...">
                         <datalist id="goalie-list"></datalist>
                     </div>
                     <div class="filter-group">
-                        <label for="hero-team">Team</label>
-                        <input type="text" id="hero-team" list="team-list" placeholder="Search team...">
+                        <label for="hero-team">Equipo del Tirador</label>
+                        <input type="text" id="hero-team" list="team-list" class="form-control form-control-sm" placeholder="Buscar equipo...">
                         <datalist id="team-list"></datalist>
+                    </div>
+                    <div class="filter-group">
+                        <label for="hero-goalieteam">Equipo del Portero</label>
+                        <input type="text" id="hero-goalieteam" list="goalieteam-list" class="form-control form-control-sm" placeholder="Buscar equipo del portero...">
+                        <datalist id="goalieteam-list"></datalist>
                     </div>
                 </div>
             </aside>
 
-            <!-- Chart area (smaller, centered) -->
             <div class="hero-chart-container">
+                <div id="loading-overlay" class="loading-overlay show">
+                    <div class="loading-text">Cargando datos… 0%</div>
+                </div>
+                <div id="hero-legend" class="chart-legend"></div>
                 <div id="hero-chart"></div>
             </div>
         </div>
     </div>
 
-    <!-- ScrollyTeller: narration LEFT, graph RIGHT -->
+    <!-- Intro narrativo temporadas -->
+    <div class="narrative-intro">
+        <h2>Evolución Histórica de los Tiros en la NHL</h2>
+        <p>Desde 2007 hasta 2025, explorá cómo cambiaron las zonas de disparo, la efectividad y los patrones de juego temporada a temporada.</p>
+    </div>
+
+    <!-- Primer ScrollyTeller: temporadas -->
     <div id="scrollyteller-app" class="scrollyteller">
         <div class="scrollyteller__narration"></div>
         <div id="st-graph" class="scrollyteller__graph"></div>
+    </div>
+
+    <!-- Intro métricas avanzadas -->
+    <div class="narrative-intro">
+        <h2>Métricas Avanzadas de Tiros</h2>
+        <p>Probabilidad de gol, rebote, congelamiento del disco y otras métricas según la ubicación del disparo.</p>
+    </div>
+
+    <!-- Segundo ScrollyTeller: métricas -->
+    <div id="scrollyteller-app2" class="scrollyteller">
+        <div class="scrollyteller__narration" id="narration2"></div>
+        <div id="st-graph2" class="scrollyteller__graph"></div>
     </div>
 
     <script src="main.js"></script>
