@@ -1,578 +1,481 @@
-// ========================
-// CARGA DE DATOS & HELPERS
-// ========================
+/* ═══════════════════════════════════════════════════════════
+   ANÁLISIS DE TIROS NHL 2007–2025
+   Scrollytelling con D3 + Scrollama
+   ═══════════════════════════════════════════════════════════ */
+
+// ──────────────── CONSTANTS ────────────────
+const RINK_IMAGE    = "hockeyRink.jpg";
+const RINK_X_MIN   = 0;
+const RINK_X_MAX   = 100;
+const RINK_Y_MIN   = -42.5;
+const RINK_Y_MAX   = 42.5;
+const BANDWIDTH     = 10;
+const THRESHOLD     = 8;
+const MIN_SHOTS_PLAYERS = 100;
+const MIN_SHOTS_GOALIES = 1000;
+
+const COLOURS = {
+    navy:       "#0a2647",
+    steel:      "#205295",
+    sky:        "#2c6faa",
+    blue:       "#1e5a8c",
+    lightBlue:  "#bad9f5",
+    darkBlue:   "#08306b",
+    red:        "#c0392b",
+    darkRed:    "#7b1a1a",
+    lightRed:   "#f8aca2",
+    orange:     "#d97706",
+    green:      "#0d7c3e",
+    gold:       "#b8860b",
+    grey:       "#6c757d",
+    sourceBlue: "#1f77b4",
+    targetRed:  "#d62728",
+};
+
+// ──────────────── GLOBAL ────────────────
 let shotData = [];
 
-async function loadShotData({ onProgress } = {}) {
-    try {
-        const seasons = Array.from({ length: 19 }, (_, i) => 2007 + i);
-        const files = seasons.map(s => `data/shots_${s}.csv`);
+// ──────────────── HELPERS ────────────────
+const debounce = (fn, ms) => {
+    let timer;
+    return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), ms); };
+};
 
-        const responses = await Promise.allSettled(
-            files.map(f => fetch(f).then(r => {
-                if (!r.ok) throw new Error(`HTTP ${r.status}`);
-                return r.text();
-            }))
-        );
-
-        let allData = [];
-        for (let i = 0; i < files.length; i++) {
-            const res = responses[i];
-            if (res.status !== 'fulfilled') continue;
-            const csvText = res.value;
-            if (!csvText || csvText.trim().length === 0) continue;
-
-            const data = d3.csvParse(csvText);
-            allData = allData.concat(data);
-
-            shotData = allData.map(d => ({
-                // Coordenadas
-                coordX: +d.coordX || +d.arenaAdjustedXCordAbs || 0,
-                coordY: +d.coordY || +d.arenaAdjustedYCord || 0,
-
-                // Resultado y tipo
-                isGoal: d.goal === "true" || d.goal === "TRUE" || d.goal === "1",
-                goal: d.goal,                               // por si acaso
-                shotType: d.shotType || "",
-
-                // Temporada / partido
-                season: String(d.season || "").trim(),
-                isPlayoffGame: (() => {
-                    const v = (d.isPlayoffGame || "").toString().trim().toLowerCase();
-                    return v === "true" || v === "1" || v === "yes" || v === "y";
-                })(),
-
-                // Tiempo / periodo
-                period: +d.period || 0,
-                time: d.time || "",
-                timeUntilNextEvent: d.timeUntilNextEvent || "",
-                timeSinceLastEvent: d.timeSinceLastEvent || "",
-                timeSinceFaceoff: d.timeSinceFaceoff || "",
-                shooterTimeOnIce: d.shooterTimeOnIce || "",
-                shooterTimeOnIceSinceFaceoff: d.shooterTimeOnIceSinceFaceoff || "",
-
-                // Evento previo (esencial para el tercer scrollyteller)
-                lastEventCategory: d.lastEventCategory || "",
-                lastEventTeam: d.lastEventTeam || "",
-                lastEventXCord: +d.lastEventXCord || 0,
-                lastEventYCord: +d.lastEventYCord || 0,
-                lastEventDistance: +d.lastEventDistance || 0,
-                lastEventAngle: +d.lastEventAngle || 0,
-
-                // Jugador / portero
-                shooterName: d.shooterName || "",
-                goalieName: d.goalieName || "",
-                shooterLeftRight: d.shooterLeftRight || "",
-                shooterPosition: d.shooterPosition || "",
-                shooterTeamCode: d.shooterTeam || "",
-                goalieTeamCode: d.goalieTeam || "",
-
-                // Situación y detalles del tiro
-                onIceSituation: d.onIceSituation || "",
-                shotOutcome: d.shotOutcome || "",
-                shotOnEmptyNet: d.shotOnEmptyNet || "",
-                shotRebound: d.shotRebound || "",
-                shotRush: d.shotRush || "",
-                shotWasOnGoal: d.shotWasOnGoal || "",
-                shotGoalieFroze: d.shotGoalieFroze || "",
-                shotPlayStopped: d.shotPlayStopped || "",
-                shotGeneratedRebound: d.shotGeneratedRebound || "",
-                offWing: d.offWing || "",
-                shotDistance: +d.shotDistance || 0,
-
-                // Métricas avanzadas
-                xGoal: +d.xGoal || 0,
-                xFroze: +d.xFroze || 0,
-                xRebound: +d.xRebound || 0,
-                xPlayStopped: +d.xPlayStopped || 0,
-                xShotWasOnGoal: +d.xShotWasOnGoal || 0,
-
-                // Marcador y equipos
-                homeTeamGoals: +d.homeTeamGoals || 0,
-                awayTeamGoals: +d.awayTeamGoals || 0,
-                shooterIsHomeTeam: d.shooterIsHomeTeam || "",
-                shootingTeamWon: d.shootingTeamWon || "",
-
-                // Velocidad y diferencia de tiempo
-                speedFromLastEvent: d.speedFromLastEvent || "",
-                timeDifferenceSinceChange: d.timeDifferenceSinceChange || "",
-                averageRestDifference: d.averageRestDifference || "",
-
-                // Rankings y estadísticas de temporada
-                ShooterSeasonRank: d.ShooterSeasonRank || "",
-                shooterSeasonGoals: d.shooterSeasonGoals || "",
-                shooterShootingPct: d.shooterShootingPct || "",
-                goalieSeasonRank: d.goalieSeasonRank || "",
-                goalieSeasonWins: d.goalieSeasonWins || "",
-                goalieSavePct: d.goalieSavePct || "",
-                shooterTeamSeasonRank: d.shooterTeamSeasonRank || "",
-                goalieTeamSeasonRank: d.goalieTeamSeasonRank || ""
-            }));
-
-            if (onProgress) {
-                onProgress(i + 1, files.length, shotData);
-            }
-            await new Promise(r => setTimeout(r, 0));
-        }
-        return allData.length > 0;
-    } catch (err) {
-        console.error("Error en loadShotData:", err);
-        return false;
+const linearRegression = (x, y) => {
+    const n = x.length;
+    if (n < 2) return null;
+    let sx = 0, sy = 0, sxy = 0, sx2 = 0;
+    for (let i = 0; i < n; i++) {
+        sx += x[i]; sy += y[i]; sxy += x[i] * y[i]; sx2 += x[i] * x[i];
     }
+    const slope = (n * sxy - sx * sy) / (n * sx2 - sx * sx);
+    return { slope, intercept: (sy - slope * sx) / n };
+};
+
+const periodLabel = (p) => {
+    const num = +p;
+    if (num === 0 || num === 4) return "OT";
+    if (num === 5) return "SO";
+    return String(num || "");
+};
+
+const parseBool = (val) => {
+    const s = String(val ?? "").trim().toLowerCase();
+    return s === "true" || s === "1" || s === "yes" || s === "y";
+};
+
+const isReboundEvent = (cat) =>
+    String(cat ?? "").trim().toUpperCase() === "SHOT";
+
+// ──────────────── DATA LOADING ────────────────
+async function loadShotData({ onProgress } = {}) {
+    const seasons = Array.from({ length: 19 }, (_, i) => 2007 + i);
+    const files   = seasons.map(s => `data/shots_${s}.csv`);
+
+    const responses = await Promise.allSettled(
+        files.map(f => fetch(f).then(r => {
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            return r.text();
+        }))
+    );
+
+    let allData = [];
+    for (let i = 0; i < files.length; i++) {
+        const res = responses[i];
+        if (res.status !== "fulfilled") continue;
+        const csvText = res.value;
+        if (!csvText?.trim()) continue;
+
+        const data = d3.csvParse(csvText);
+        allData = allData.concat(data);
+
+        shotData = allData.map(d => ({
+            coordX:  +d.coordX  || +d.arenaAdjustedXCordAbs || 0,
+            coordY:  +d.coordY  || +d.arenaAdjustedYCord    || 0,
+            isGoal:  parseBool(d.goal),
+            goal:    d.goal,
+            shotType:           d.shotType            || "",
+            season:             String(d.season || "").trim(),
+            isPlayoffGame:      parseBool(d.isPlayoffGame),
+            period:             +d.period || 0,
+            time:               d.time                || "",
+            timeUntilNextEvent: d.timeUntilNextEvent  || "",
+            timeSinceLastEvent: d.timeSinceLastEvent  || "",
+            timeSinceFaceoff:   d.timeSinceFaceoff    || "",
+            shooterTimeOnIce:   d.shooterTimeOnIce    || "",
+            shooterTimeOnIceSinceFaceoff: d.shooterTimeOnIceSinceFaceoff || "",
+            lastEventCategory:  d.lastEventCategory   || "",
+            lastEventTeam:      d.lastEventTeam       || "",
+            lastEventXCord:     +d.lastEventXCord     || 0,
+            lastEventYCord:     +d.lastEventYCord     || 0,
+            lastEventDistance:  +d.lastEventDistance  || 0,
+            lastEventAngle:     +d.lastEventAngle     || 0,
+            shooterName:        d.shooterName         || "",
+            goalieName:         d.goalieName          || "",
+            shooterLeftRight:   d.shooterLeftRight    || "",
+            shooterPosition:    d.shooterPosition     || "",
+            shooterTeamCode:    d.shooterTeam         || "",
+            goalieTeamCode:     d.goalieTeam          || "",
+            onIceSituation:     d.onIceSituation      || "",
+            shotOutcome:        d.shotOutcome         || "",
+            shotOnEmptyNet:     d.shotOnEmptyNet      || "",
+            shotRebound:        d.shotRebound         || "",
+            shotRush:           d.shotRush            || "",
+            shotWasOnGoal:      d.shotWasOnGoal       || "",
+            shotGoalieFroze:    d.shotGoalieFroze     || "",
+            shotPlayStopped:    d.shotPlayStopped     || "",
+            shotGeneratedRebound: d.shotGeneratedRebound || "",
+            offWing:            d.offWing             || "",
+            shotDistance:       +d.shotDistance       || 0,
+            xGoal:              +d.xGoal              || 0,
+            xFroze:             +d.xFroze             || 0,
+            xRebound:           +d.xRebound           || 0,
+            xPlayStopped:       +d.xPlayStopped       || 0,
+            xShotWasOnGoal:     +d.xShotWasOnGoal     || 0,
+            homeTeamGoals:      +d.homeTeamGoals      || 0,
+            awayTeamGoals:      +d.awayTeamGoals      || 0,
+            shooterIsHomeTeam:  d.shooterIsHomeTeam   || "",
+            shootingTeamWon:    d.shootingTeamWon     || "",
+            speedFromLastEvent: d.speedFromLastEvent  || "",
+            timeDifferenceSinceChange: d.timeDifferenceSinceChange || "",
+            averageRestDifference:     d.averageRestDifference     || "",
+            ShooterSeasonRank:   d.ShooterSeasonRank    || "",
+            shooterSeasonGoals:  d.shooterSeasonGoals   || "",
+            shooterShootingPct:  d.shooterShootingPct   || "",
+            goalieSeasonRank:    d.goalieSeasonRank     || "",
+            goalieSeasonWins:    d.goalieSeasonWins     || "",
+            goalieSavePct:       d.goalieSavePct        || "",
+            shooterTeamSeasonRank: d.shooterTeamSeasonRank || "",
+            goalieTeamSeasonRank:  d.goalieTeamSeasonRank  || "",
+        }));
+
+        if (onProgress) onProgress(i + 1, files.length, shotData);
+        await new Promise(r => setTimeout(r, 0));
+    }
+    return allData.length > 0;
 }
 
-const RINK_IMAGE = "hockeyRink.jpg";
+// ──────────────── SEASON METRICS ────────────────
+function computeSeasonMetrics() {
+    if (!shotData.length) return null;
 
-function periodLabel(p) {
-    if (p === 4) return "OT";
-    if (p === 5) return "SO";
-    return String(p);
-}
+    const build = (groups, mapper) => {
+        const result = {};
+        for (const [key, shots] of groups) {
+            result[key] = mapper(shots, shots[0]);
+        }
+        return result;
+    };
 
-function getHeroFilters() {
-    const goalRadio = document.querySelector('input[name="goal-result"]:checked')?.value || "all";
-    const shotType = document.getElementById("hero-shottype")?.value || "all";
-    const season = document.getElementById("hero-season")?.value || "all";
-    const playoffRadio = document.querySelector('input[name="playoff"]:checked')?.value || "all";
-    const period = document.getElementById("hero-period")?.value || "all";
-    const handRadio = document.querySelector('input[name="hand"]:checked')?.value || "all";
-    const onIceSituation = document.getElementById("hero-onicesituation")?.value || "all";
-    const shooterPosition = document.getElementById("hero-shooterposition")?.value || "all";
-    const shotOutcome = document.getElementById("hero-shotoutcome")?.value || "all";
-    const shooter = document.getElementById("hero-shooter")?.value.trim().toLowerCase() || "";
-    const goalie = document.getElementById("hero-goalie")?.value.trim().toLowerCase() || "";
-    const team = document.getElementById("hero-team")?.value.trim().toLowerCase() || "";
-    const goalieTeam = document.getElementById("hero-goalieteam")?.value.trim().toLowerCase() || "";
+    const playerMapper = (shots, first) => {
+        const avgXGoal = d3.mean(shots, d => +d.xGoal);
+        const sumXGoal = d3.sum(shots, d => +d.xGoal);
+        const rawPct   = +first.shooterShootingPct;
+        const rebounds = shots.filter(d => isReboundEvent(d.lastEventCategory)).length;
+        return {
+            shooterSeasonRank:  +first.ShooterSeasonRank,
+            shooterSeasonGoals: +first.shooterSeasonGoals,
+            shooterShootingPct: isNaN(rawPct) ? null : rawPct / 100,
+            avgXGoal, sumXGoal,
+            shotCount:    shots.length,
+            reboundRate:  shots.length ? rebounds / shots.length : null,
+        };
+    };
+
+    const goalieMapper = (shots, first) => {
+        const avgXGoal = d3.mean(shots, d => +d.xGoal);
+        const sumXGoal = d3.sum(shots, d => +d.xGoal);
+        const rawSave  = +first.goalieSavePct;
+        const rebounds = shots.filter(d => isReboundEvent(d.lastEventCategory)).length;
+        return {
+            goalieSeasonRank: +first.goalieSeasonRank,
+            goalieSeasonWins: +first.goalieSeasonWins,
+            goalieSavePct:    isNaN(rawSave) ? null : rawSave / 100,
+            avgXGoal, sumXGoal,
+            shotCount:    shots.length,
+            reboundRate:  shots.length ? rebounds / shots.length : null,
+        };
+    };
+
+    const teamMapper = (shots, first, rankKey) => {
+        const avgXGoal = d3.mean(shots, d => +d.xGoal);
+        const sumXGoal = d3.sum(shots, d => +d.xGoal);
+        const rebounds = shots.filter(d => isReboundEvent(d.lastEventCategory)).length;
+        return {
+            rank:       +first[rankKey],
+            avgXGoal, sumXGoal,
+            shotCount:  shots.length,
+            reboundRate: shots.length ? rebounds / shots.length : null,
+        };
+    };
 
     return {
-        goalFilter: goalRadio,
-        shotType,
-        season,
-        playoff: playoffRadio,
-        period,
-        hand: handRadio,
-        onIceSituation,
-        shooterPosition,
-        shotOutcome,
-        shooter,
-        goalie,
-        team,
-        goalieTeam
+        players:       build(d3.group(shotData, d => `${d.shooterName}||${d.season}`), playerMapper),
+        goalies:       build(d3.group(shotData, d => `${d.goalieName}||${d.season}`),   goalieMapper),
+        teamsShooter:  build(d3.group(shotData, d => `${d.shooterTeamCode}||${d.season}`),
+                             (s, f) => teamMapper(s, f, "shooterTeamSeasonRank")),
+        teamsGoalie:   build(d3.group(shotData, d => `${d.goalieTeamCode}||${d.season}`),
+                             (s, f) => teamMapper(s, f, "goalieTeamSeasonRank")),
     };
 }
 
-function applyHeroFilters(data, filters) {
-    let filtered = [...data];
-    if (filters.goalFilter === "goals") filtered = filtered.filter(d => d.isGoal);
-    else if (filters.goalFilter === "non-goals") filtered = filtered.filter(d => !d.isGoal);
-    if (filters.shotType !== "all") filtered = filtered.filter(d => d.shotType === filters.shotType);
-    if (filters.season !== "all") filtered = filtered.filter(d => d.season === filters.season);
-    if (filters.playoff !== "all") {
-        const playoffBool = filters.playoff === "true";
-        filtered = filtered.filter(d => d.isPlayoffGame === playoffBool);
-    }
-    if (filters.period !== "all") filtered = filtered.filter(d => periodLabel(d.period) === filters.period);
-    if (filters.hand !== "all") filtered = filtered.filter(d => d.shooterLeftRight === filters.hand);
-    if (filters.onIceSituation !== "all") filtered = filtered.filter(d => d.onIceSituation === filters.onIceSituation);
-    if (filters.shooterPosition !== "all") filtered = filtered.filter(d => d.shooterPosition === filters.shooterPosition);
-    if (filters.shotOutcome !== "all") filtered = filtered.filter(d => d.shotOutcome === filters.shotOutcome);
-    if (filters.shooter) filtered = filtered.filter(d => d.shooterName.toLowerCase().includes(filters.shooter));
-    if (filters.goalie) filtered = filtered.filter(d => d.goalieName.toLowerCase().includes(filters.goalie));
-    if (filters.team) filtered = filtered.filter(d => d.shooterTeamCode.toLowerCase().includes(filters.team));
-    if (filters.goalieTeam) filtered = filtered.filter(d => d.goalieTeamCode.toLowerCase().includes(filters.goalieTeam));
-    return filtered;
+// ──────────────── HERO CHART ────────────────
+const mapX = (x, w) => ((x - RINK_X_MIN) / (RINK_X_MAX - RINK_X_MIN)) * w;
+const mapY = (y, h) => h * (RINK_Y_MAX - y) / (RINK_Y_MAX - RINK_Y_MIN);
+
+function getHeroFilters() {
+    const radio = (name) => document.querySelector(`input[name="${name}"]:checked`)?.value || "all";
+    return {
+        goalFilter:     radio("goal-result"),
+        shotType:       document.getElementById("hero-shottype")?.value       || "all",
+        season:         document.getElementById("hero-season")?.value         || "all",
+        playoff:        radio("playoff"),
+        period:         document.getElementById("hero-period")?.value         || "all",
+        hand:           radio("hand"),
+        onIceSituation: document.getElementById("hero-onicesituation")?.value || "all",
+        shooterPosition:document.getElementById("hero-shooterposition")?.value || "all",
+        shotOutcome:    document.getElementById("hero-shotoutcome")?.value    || "all",
+        shooter:        document.getElementById("hero-shooter")?.value.trim().toLowerCase()    || "",
+        goalie:         document.getElementById("hero-goalie")?.value.trim().toLowerCase()     || "",
+        team:           document.getElementById("hero-team")?.value.trim().toLowerCase()       || "",
+        goalieTeam:     document.getElementById("hero-goalieteam")?.value.trim().toLowerCase() || "",
+    };
 }
 
-const RINK_X_MIN = 0;
-const RINK_X_MAX = 100;
-const RINK_Y_MIN = -42.5;
-const RINK_Y_MAX = 42.5;
-const BANDWIDTH = 10;
-const THRESHOLD = 8;
+function applyHeroFilters(data, f) {
+    let arr = [...data];
+    if (f.goalFilter === "goals")     arr = arr.filter(d => d.isGoal);
+    else if (f.goalFilter === "non-goals") arr = arr.filter(d => !d.isGoal);
+    if (f.shotType       !== "all") arr = arr.filter(d => d.shotType        === f.shotType);
+    if (f.season         !== "all") arr = arr.filter(d => d.season          === f.season);
+    if (f.playoff        !== "all") arr = arr.filter(d => d.isPlayoffGame   === (f.playoff === "true"));
+    if (f.period         !== "all") arr = arr.filter(d => periodLabel(d.period) === f.period);
+    if (f.hand           !== "all") arr = arr.filter(d => d.shooterLeftRight === f.hand);
+    if (f.onIceSituation !== "all") arr = arr.filter(d => d.onIceSituation  === f.onIceSituation);
+    if (f.shooterPosition!== "all") arr = arr.filter(d => d.shooterPosition === f.shooterPosition);
+    if (f.shotOutcome    !== "all") arr = arr.filter(d => d.shotOutcome     === f.shotOutcome);
+    if (f.shooter)    arr = arr.filter(d => d.shooterName.toLowerCase().includes(f.shooter));
+    if (f.goalie)     arr = arr.filter(d => d.goalieName.toLowerCase().includes(f.goalie));
+    if (f.team)       arr = arr.filter(d => d.shooterTeamCode.toLowerCase().includes(f.team));
+    if (f.goalieTeam) arr = arr.filter(d => d.goalieTeamCode.toLowerCase().includes(f.goalieTeam));
+    return arr;
+}
 
 function renderHeroChart() {
     if (!shotData.length) return;
-    const filters = getHeroFilters();
-    let filtered = applyHeroFilters(shotData, filters);
-
+    const filters  = getHeroFilters();
+    const filtered = applyHeroFilters(shotData, filters);
     const container = d3.select("#hero-chart");
+    const legendEl  = document.getElementById("hero-legend");
     container.html("");
-    const legendEl = document.getElementById("hero-legend");
 
-    if (filtered.length === 0) {
-        container.append("p")
-            .style("text-align", "center")
-            .style("color", "#475569")
+    if (!filtered.length) {
+        container.append("p").style("text-align","center").style("color","#475569")
             .text("Ningún tiro coincide con los filtros seleccionados.");
         if (legendEl) legendEl.innerHTML = "";
         return;
     }
 
-    const width = 800, height = 680;
-    const mapX = (x) => ((x - RINK_X_MIN) / (RINK_X_MAX - RINK_X_MIN)) * width;
-    const mapY = (y) => height * (RINK_Y_MAX - y) / (RINK_Y_MAX - RINK_Y_MIN);
-
+    const W = 800, H = 680;
+    const mx = x => mapX(x, W), my = y => mapY(y, H);
     const svg = container.append("svg")
-        .attr("viewBox", `0 0 ${width} ${height}`)
-        .attr("preserveAspectRatio", "xMidYMid meet");
+        .attr("viewBox", `0 0 ${W} ${H}`).attr("preserveAspectRatio", "xMidYMid meet");
 
-    svg.append("image")
-        .attr("href", RINK_IMAGE)
-        .attr("width", width)
-        .attr("height", height)
-        .attr("preserveAspectRatio", "none")
-        .style("opacity", 0.85);
+    svg.append("image").attr("href", RINK_IMAGE).attr("width", W).attr("height", H)
+        .attr("preserveAspectRatio", "none").style("opacity", 0.85);
 
     const geoPath = d3.geoPath();
-    const showGoals = filters.goalFilter !== "non-goals";
+
+    const drawContours = (data, colourLow, colourHigh, fillOpacity, strokeColour) => {
+        if (!data.length) return;
+        const pts = data.map(d => [mx(d.coordX), my(d.coordY)]);
+        const density = d3.contourDensity().x(d => d[0]).y(d => d[1])
+            .size([W, H]).bandwidth(BANDWIDTH).thresholds(THRESHOLD);
+        const contours = density(pts);
+        const pos = contours.filter(c => c.value > 0);
+        const low  = pos.length ? d3.min(pos, c => c.value) : 0.001;
+        const high = d3.max(contours, c => c.value) || 0.01;
+        const scale = d3.scaleSequentialLog().domain([low, high])
+            .interpolator(d3.interpolateRgbBasis([colourLow, colourHigh]));
+        svg.append("g").selectAll("path").data(contours).enter().append("path")
+            .attr("d", geoPath).attr("fill", d => scale(d.value))
+            .attr("fill-opacity", fillOpacity).attr("stroke", strokeColour).attr("stroke-width", 0.7);
+    };
+
+    const showGoals    = filters.goalFilter !== "non-goals";
     const showNonGoals = filters.goalFilter !== "goals";
+    if (showGoals)    drawContours(filtered.filter(d => d.isGoal),  "#bad9f5", "#08306b", 0.85, "#1d4ed8");
+    if (showNonGoals) drawContours(filtered.filter(d => !d.isGoal), "#f8aca2", "#670c00", 0.35, "#cbd5e1");
 
-    // ── Goles → azul ──
-    if (showGoals) {
-        const goalsData = filtered.filter(d => d.isGoal);
-        if (goalsData.length) {
-            const points = goalsData.map(d => [mapX(d.coordX), mapY(d.coordY)]);
-            const density = d3.contourDensity()
-                .x(d => d[0]).y(d => d[1])
-                .size([width, height])
-                .bandwidth(BANDWIDTH).thresholds(THRESHOLD);
-            const contours = density(points);
-
-            const posContours = contours.filter(c => c.value > 0);
-            const goalMin = posContours.length ? d3.min(posContours, c => c.value) : 0.001;
-            const goalMax = d3.max(contours, c => c.value) || 0.01;
-            const goalColorScale = d3.scaleSequentialLog()
-                .domain([goalMin, goalMax])
-                .interpolator(d3.interpolateRgbBasis(["#bad9f5", "#08306b"]));
-
-            svg.append("g")
-                .selectAll("path")
-                .data(contours)
-                .enter()
-                .append("path")
-                .attr("d", geoPath)
-                .attr("fill", d => goalColorScale(d.value))
-                .attr("fill-opacity", 0.85)
-                .attr("stroke", "#1d4ed8")
-                .attr("stroke-width", 0.8);
-        }
-    }
-
-    // ── Fallados / Atajados → rojo ──
-    if (showNonGoals) {
-        const nonData = filtered.filter(d => !d.isGoal);
-        if (nonData.length) {
-            const points = nonData.map(d => [mapX(d.coordX), mapY(d.coordY)]);
-            const density = d3.contourDensity()
-                .x(d => d[0]).y(d => d[1])
-                .size([width, height])
-                .bandwidth(BANDWIDTH).thresholds(THRESHOLD);
-            const contours = density(points);
-
-            const posContours = contours.filter(c => c.value > 0);
-            const nonMin = posContours.length ? d3.min(posContours, c => c.value) : 0.001;
-            const nonMax = d3.max(contours, c => c.value) || 0.01;
-            const nonColorScale = d3.scaleSequentialLog()
-                .domain([nonMin, nonMax])
-                .interpolator(d3.interpolateRgbBasis(["#f8aca2", "#670c00"]));
-
-            svg.append("g")
-                .selectAll("path")
-                .data(contours)
-                .enter()
-                .append("path")
-                .attr("d", geoPath)
-                .attr("fill", d => nonColorScale(d.value))
-                .attr("fill-opacity", 0.35)
-                .attr("stroke", "#cbd5e1")
-                .attr("stroke-width", 0.4);
-        }
-    }
-
-    // ── Leyenda HTML ──
     if (legendEl) {
         legendEl.innerHTML = `
             <div class="legend-title">Densidad de tiros</div>
-            <div class="legend-gradient-group">
-                <div class="legend-label">Goles</div>
-                <div class="legend-gradient-bar" style="background: linear-gradient(to right, #deebf7, #08306b);"></div>
-            </div>
-            <div class="legend-gradient-group">
-                <div class="legend-label">Fallados / Atajados</div>
-                <div class="legend-gradient-bar" style="background: linear-gradient(to right, #fee0d2, #67001f);"></div>
-            </div>
-            <div class="shots-count">Tiros: ${filtered.length.toLocaleString('es-ES')}</div>
-        `;
+            <div class="legend-gradient-group"><div class="legend-label">Goles</div>
+                <div class="legend-gradient-bar" style="background:linear-gradient(to right,#deebf7,#08306b)"></div></div>
+            <div class="legend-gradient-group"><div class="legend-label">Fallados / Atajados</div>
+                <div class="legend-gradient-bar" style="background:linear-gradient(to right,#fee0d2,#67001f)"></div></div>
+            <div class="shots-count">Tiros: ${filtered.length.toLocaleString("es-ES")}</div>`;
     }
 }
 
 function populateFilters() {
     if (!shotData.length) return;
-    const shotTypes = [...new Set(shotData.map(d => d.shotType).filter(Boolean))].sort();
-    const seasons = [...new Set(shotData.map(d => d.season).filter(Boolean))].sort((a, b) => a - b);
-    const periods = [...new Set(shotData.map(d => periodLabel(d.period)).filter(Boolean))].sort((a,b) => {
-        const order = {"1":1,"2":2,"3":3,"OT":4,"SO":5};
-        return (order[a]||99) - (order[b]||99);
-    });
-    const onIceSituations = [...new Set(shotData.map(d => d.onIceSituation).filter(Boolean))].sort();
-    const shooterPositions = [...new Set(shotData.map(d => d.shooterPosition).filter(Boolean))].sort();
-    const shotOutcomes = [...new Set(shotData.map(d => d.shotOutcome).filter(Boolean))].sort();
-
-    const shooterNames = [...new Set(shotData.map(d => d.shooterName).filter(Boolean))].sort();
-    const goalieNames = [...new Set(shotData.map(d => d.goalieName).filter(Boolean))].sort();
-    const shooterTeamCodes = [...new Set(shotData.map(d => d.shooterTeamCode).filter(Boolean))].sort();
-    const goalieTeamCodes = [...new Set(shotData.map(d => d.goalieTeamCode).filter(Boolean))].sort();
-
-    const populateSelect = (id, values) => {
-        const select = document.getElementById(id);
-        if (!select) return;
-        select.innerHTML = select.options[0] ? `<option value="all">${select.options[0].text}</option>` : '<option value="all">Todos</option>';
-        values.forEach(v => {
-            const opt = document.createElement("option");
-            opt.value = v;
-            opt.textContent = v;
-            select.appendChild(opt);
-        });
+    const uniq = (fn) => [...new Set(shotData.map(fn).filter(Boolean))].sort();
+    const populateSelect = (id, values, label = "Todos") => {
+        const sel = document.getElementById(id);
+        if (!sel) return;
+        sel.innerHTML = `<option value="all">${label}</option>`;
+        values.forEach(v => { const o = document.createElement("option"); o.value = v; o.textContent = v; sel.appendChild(o); });
     };
-    populateSelect("hero-shottype", shotTypes);
-    populateSelect("hero-season", seasons);
-    populateSelect("hero-period", periods);
-    populateSelect("hero-onicesituation", onIceSituations);
-    populateSelect("hero-shooterposition", shooterPositions);
-    populateSelect("hero-shotoutcome", shotOutcomes);
-
-    const populateDatalist = (listId, values) => {
-        const dl = document.getElementById(listId);
+    const populateDatalist = (id, values) => {
+        const dl = document.getElementById(id);
         if (!dl) return;
         dl.innerHTML = "";
-        values.forEach(v => {
-            const opt = document.createElement("option");
-            opt.value = v;
-            dl.appendChild(opt);
-        });
+        values.forEach(v => { const o = document.createElement("option"); o.value = v; dl.appendChild(o); });
     };
-    populateDatalist("shooter-list", shooterNames);
-    populateDatalist("goalie-list", goalieNames);
-    populateDatalist("team-list", shooterTeamCodes);
-    populateDatalist("goalieteam-list", goalieTeamCodes);
+
+    populateSelect("hero-shottype",        uniq(d => d.shotType));
+    populateSelect("hero-season",          uniq(d => d.season).sort((a,b) => a - b));
+    populateSelect("hero-period",          uniq(d => periodLabel(d.period)).sort((a,b) => ({"1":1,"2":2,"3":3,"OT":4,"SO":5}[a]||99) - ({"1":1,"2":2,"3":3,"OT":4,"SO":5}[b]||99)));
+    populateSelect("hero-onicesituation",  uniq(d => d.onIceSituation));
+    populateSelect("hero-shooterposition", uniq(d => d.shooterPosition));
+    populateSelect("hero-shotoutcome",     uniq(d => d.shotOutcome));
+
+    populateDatalist("shooter-list",     uniq(d => d.shooterName));
+    populateDatalist("goalie-list",      uniq(d => d.goalieName));
+    populateDatalist("team-list",        uniq(d => d.shooterTeamCode));
+    populateDatalist("goalieteam-list",  uniq(d => d.goalieTeamCode));
 }
 
 function setupHeroListeners() {
-    const updateDebounced = debounce(() => renderHeroChart(), 200);
-    document.getElementById("hero-shottype").addEventListener("change", renderHeroChart);
-    document.getElementById("hero-season").addEventListener("change", renderHeroChart);
-    document.getElementById("hero-period").addEventListener("change", renderHeroChart);
-    document.getElementById("hero-onicesituation").addEventListener("change", renderHeroChart);
-    document.getElementById("hero-shooterposition").addEventListener("change", renderHeroChart);
-    document.getElementById("hero-shotoutcome").addEventListener("change", renderHeroChart);
-    document.querySelectorAll('input[name="goal-result"]').forEach(r => r.addEventListener("change", renderHeroChart));
-    document.querySelectorAll('input[name="playoff"]').forEach(r => r.addEventListener("change", renderHeroChart));
-    document.querySelectorAll('input[name="hand"]').forEach(r => r.addEventListener("change", renderHeroChart));
-    document.getElementById("hero-shooter").addEventListener("input", updateDebounced);
-    document.getElementById("hero-goalie").addEventListener("input", updateDebounced);
-    document.getElementById("hero-team").addEventListener("input", updateDebounced);
-    document.getElementById("hero-goalieteam").addEventListener("input", updateDebounced);
-    document.getElementById("hero-shooter").addEventListener("change", renderHeroChart);
-    document.getElementById("hero-goalie").addEventListener("change", renderHeroChart);
-    document.getElementById("hero-team").addEventListener("change", renderHeroChart);
-    document.getElementById("hero-goalieteam").addEventListener("change", renderHeroChart);
+    const update = debounce(renderHeroChart, 200);
+    ["hero-shottype","hero-season","hero-period","hero-onicesituation","hero-shooterposition","hero-shotoutcome"]
+        .forEach(id => document.getElementById(id)?.addEventListener("change", renderHeroChart));
+    document.querySelectorAll('input[name="goal-result"], input[name="playoff"], input[name="hand"]')
+        .forEach(r => r.addEventListener("change", renderHeroChart));
+    ["hero-shooter","hero-goalie","hero-team","hero-goalieteam"].forEach(id => {
+        document.getElementById(id)?.addEventListener("input", update);
+        document.getElementById(id)?.addEventListener("change", renderHeroChart);
+    });
 }
 
-function debounce(func, wait) {
-    let timeout;
-    return function(...args) {
-        clearTimeout(timeout);
-        timeout = setTimeout(() => func.apply(this, args), wait);
-    };
-}
-
-// ========================
-// PRIMER SCROLLYTELLER (temporadas)
-// ========================
+// ──────────────── SCROLLYTELLER 1: HISTORICAL CONTOURS ────────────────
 function renderContourPlot(containerId, filterType, options = {}) {
     if (!shotData.length) return;
-    const { width = 600, height = 510, seasonStart = null, seasonEnd = null, legendId = null } = options;
+    const { width = 600, height = 510, seasonStart, seasonEnd, legendId } = options;
     let filtered = [...shotData];
+    if (seasonStart != null && seasonEnd != null)
+        filtered = filtered.filter(d => { const s = +d.season; return s >= seasonStart && s <= seasonEnd; });
+    if (filterType === "goals")     filtered = filtered.filter(d => d.isGoal);
+    if (filterType === "non-goals") filtered = filtered.filter(d => !d.isGoal);
 
-    // Filter by season range
-    if (seasonStart !== null && seasonEnd !== null) {
-        filtered = filtered.filter(d => {
-            const s = Number(d.season);
-            return s >= seasonStart && s <= seasonEnd;
-        });
-    }
-
-    if (filterType === "goals") filtered = filtered.filter(d => d.isGoal === true);
-    if (filterType === "non-goals") filtered = filtered.filter(d => d.isGoal === false);
-
-    const container = d3.select(`#${containerId}`);
-    container.html("");
-
-    const mapX = (x) => ((x - RINK_X_MIN) / (RINK_X_MAX - RINK_X_MIN)) * width;
-    const mapY = (y) => height * (RINK_Y_MAX - y) / (RINK_Y_MAX - RINK_Y_MIN);
-
-    const svg = container.append("svg")
-        .attr("viewBox", `0 0 ${width} ${height}`)
-        .attr("preserveAspectRatio", "xMidYMid meet")
-        .attr("width", width)
-        .attr("height", height);
-
-    svg.append("image")
-        .attr("href", RINK_IMAGE)
-        .attr("width", width)
-        .attr("height", height)
-        .attr("preserveAspectRatio", "none")
-        .style("opacity", 0.85);
+    const container = d3.select(`#${containerId}`).html("");
+    const W = width, H = height;
+    const mx = x => mapX(x, W), my = y => mapY(y, H);
+    const svg = container.append("svg").attr("viewBox", `0 0 ${W} ${H}`)
+        .attr("preserveAspectRatio", "xMidYMid meet").attr("width", W).attr("height", H);
+    svg.append("image").attr("href", RINK_IMAGE).attr("width", W).attr("height", H)
+        .attr("preserveAspectRatio", "none").style("opacity", 0.85);
 
     const geoPath = d3.geoPath();
+    let goalMin, goalMax, nonMin, nonMax;
 
-    // ── Goles (azul) ──
-    let goalMin, goalMax;
+    const draw = (data, lowC, highC, fillOp, strokeC) => {
+        if (!data.length) return;
+        const pts = data.map(d => [mx(d.coordX), my(d.coordY)]);
+        const contours = d3.contourDensity().x(d => d[0]).y(d => d[1])
+            .size([W, H]).bandwidth(BANDWIDTH).thresholds(THRESHOLD)(pts);
+        const pos = contours.filter(c => c.value > 0);
+        const lo = pos.length ? d3.min(pos, c => c.value) : 0.001;
+        const hi = d3.max(contours, c => c.value) || 0.01;
+        const scale = d3.scaleSequentialLog().domain([lo, hi])
+            .interpolator(d3.interpolateRgbBasis([lowC, highC]));
+        svg.append("g").selectAll("path").data(contours).enter().append("path")
+            .attr("d", geoPath).attr("fill", d => scale(d.value))
+            .attr("fill-opacity", fillOp).attr("stroke", strokeC).attr("stroke-width", 0.7);
+        return { lo, hi };
+    };
+
     if (filterType === "all" || filterType === "goals") {
-        const goalsData = filtered.filter(d => d.isGoal === true);
-        if (goalsData.length) {
-            const points = goalsData.map(d => [mapX(d.coordX), mapY(d.coordY)]);
-            const density = d3.contourDensity()
-                .x(d => d[0]).y(d => d[1])
-                .size([width, height])
-                .bandwidth(BANDWIDTH).thresholds(THRESHOLD);
-            const contours = density(points);
-
-            const posContours = contours.filter(c => c.value > 0);
-            goalMin = posContours.length ? d3.min(posContours, c => c.value) : 0.001;
-            goalMax = d3.max(contours, c => c.value) || 0.01;
-            const goalColorScale = d3.scaleSequentialLog()
-                .domain([goalMin, goalMax])
-                .interpolator(d3.interpolateRgbBasis(["#bad9f5", "#08306b"]));
-
-            svg.append("g")
-                .selectAll("path")
-                .data(contours)
-                .enter()
-                .append("path")
-                .attr("d", geoPath)
-                .attr("fill", d => goalColorScale(d.value))
-                .attr("fill-opacity", 0.85)
-                .attr("stroke", "#1d4ed8")
-                .attr("stroke-width", 0.8);
-        }
+        const r = draw(filtered.filter(d => d.isGoal), "#bad9f5", "#08306b", 0.85, "#1d4ed8");
+        if (r) { goalMin = r.lo; goalMax = r.hi; }
     }
-
-    // ── Fallados/Atajados (rojo) ──
-    let nonMin, nonMax;
     if (filterType === "all" || filterType === "non-goals") {
-        const nonData = filtered.filter(d => d.isGoal === false);
-        if (nonData.length) {
-            const points = nonData.map(d => [mapX(d.coordX), mapY(d.coordY)]);
-            const density = d3.contourDensity()
-                .x(d => d[0]).y(d => d[1])
-                .size([width, height])
-                .bandwidth(BANDWIDTH).thresholds(THRESHOLD);
-            const contours = density(points);
-
-            const posContours = contours.filter(c => c.value > 0);
-            nonMin = posContours.length ? d3.min(posContours, c => c.value) : 0.001;
-            nonMax = d3.max(contours, c => c.value) || 0.01;
-            const nonColorScale = d3.scaleSequentialLog()
-                .domain([nonMin, nonMax])
-                .interpolator(d3.interpolateRgbBasis(["#f8aca2", "#670c00"]));
-
-            svg.append("g")
-                .selectAll("path")
-                .data(contours)
-                .enter()
-                .append("path")
-                .attr("d", geoPath)
-                .attr("fill", d => nonColorScale(d.value))
-                .attr("fill-opacity", 0.35)
-                .attr("stroke", "#cbd5e1")
-                .attr("stroke-width", 0.4);
-        }
+        const r = draw(filtered.filter(d => !d.isGoal), "#f8aca2", "#670c00", 0.35, "#cbd5e1");
+        if (r) { nonMin = r.lo; nonMax = r.hi; }
     }
 
-    // ── Legend (only when legendId is given) ──
     if (legendId) {
-        const legendEl = document.getElementById(legendId);
-        if (legendEl) {
-            const gradientBar = (label, color1, color2, min, max) => {
-                if (min === undefined) return "";
-                const fMin = min < 0.01 ? min.toExponential(1) : min.toFixed(2);
-                const fMax = max < 0.01 ? max.toExponential(1) : max.toFixed(2);
-                return `
-                    <div class="legend-label">${label}</div>
-                    <div class="legend-gradient-bar" style="background: linear-gradient(to right, ${color1}, ${color2});"></div>`;
-            };
-
-            let goalBlock = "";
-            if ((filterType === "all" || filterType === "goals") && goalMin !== undefined) {
-                goalBlock = gradientBar("Goles", "#deebf7", "#08306b", goalMin, goalMax);
-            }
-            let nonBlock = "";
-            if ((filterType === "all" || filterType === "non-goals") && nonMin !== undefined) {
-                nonBlock = gradientBar("Fallados/Atajados", "#fee0d2", "#67001f", nonMin, nonMax);
-            }
-
-            legendEl.innerHTML = `
-                <div class="legend-gradient-group">${goalBlock}</div>
-                <div class="legend-gradient-group">${nonBlock}</div>
-                <div class="shots-count">Tiros: ${filtered.length.toLocaleString('es-ES')}</div>
-            `;
+        const el = document.getElementById(legendId);
+        if (el) {
+            const bar = (label, c1, c2) =>
+                `<div class="legend-label">${label}</div><div class="legend-gradient-bar" style="background:linear-gradient(to right,${c1},${c2})"></div>`;
+            el.innerHTML = `<div class="legend-gradient-group">${goalMin != null ? bar("Goles","#deebf7","#08306b") : ""}</div>
+                <div class="legend-gradient-group">${nonMin != null ? bar("Fallados","#fee0d2","#67001f") : ""}</div>
+                <div class="shots-count">Tiros: ${filtered.length.toLocaleString("es-ES")}</div>`;
         }
     }
 }
 
-async function setupScrollama() {
-    const allSeasons = [...new Set(shotData.map(d => d.season).filter(Boolean))]
-        .map(Number)
-        .sort((a, b) => a - b);
+async function setupScrollama1() {
+    const allSeasons = [...new Set(shotData.map(d => d.season).filter(Boolean))].map(Number).sort((a,b)=>a-b);
+    if (!allSeasons.length) return;
 
-    if (allSeasons.length === 0) {
-        console.warn("No hay temporadas en los datos");
-        return;
-    }
-
-    const groups = [
-        { label: "2007 – 2010", start: 2007, end: 2010 },
-        { label: "2011 – 2014", start: 2011, end: 2014 },
-        { label: "2015 – 2019", start: 2015, end: 2019 },
-        { label: "2020 – 2025", start: 2020, end: 2025 }
+    const seasonSteps = [
+        {
+            title: "Temporadas 2007 – 2010",
+            text: "De 2007 a 2010, en la liga se jugaba mediante una táctica basada en el volumen de tiros, donde no se renunciaba a ninguna oportunidad para tirar. Estos disparos se distribuían por toda la zona ofensiva, con una preferencia clara cerca de la red, pero en la que podemos ver otras zonas de alta densidad a larga distancia, cuya ubicación suele asociarse a tiros de los defensores.",
+            start: 2007,
+            end: 2010
+        },
+        {
+            title: "Temporadas 2011 – 2014",
+            text: "Entre 2011 y 2014, se empieza a observar un ligero cambio. El volumen total de disparos disminuye, y lo hace principalmente en los disparos de larga distancia. Sin embargo, no se aprecia una compensación con más tiros desde cerca. Los analistas han empezado a hacer su trabajo, y la orden de los entrenadores es clara, hay que renunciar a algunos disparos de larga distancia en favor de mejores oportunidades, pero los jugadores aún no se han adaptado",
+            start: 2011,
+            end: 2014
+        },
+        {
+            title: "Temporadas 2015 – 2019",
+            text: "De 2015 a 2019, la revolución analítica se implanta de lleno. El volumen de tiros total aumenta considerablemente, incluso a valores superiores a los de 2010, los jugadores se han empezado a adaptar y vemos como la densidad así lo refleja cerca de la portería, no obstante, aún se observan zonas de media densidad a larga distancia, aún quedan jugadores de la vieja escuela, que se oponen el cambio.",
+            start: 2015,
+            end: 2019
+        },
+        {
+            title: "Temporadas 2020 – 2025",
+            text: "La era moderna del hockey, con una adaptación completa e incluso dependiente de los datos, el volumen de tiros llega a su máximo, y así lo hacen también los goles, la densidad de disparos se concentra en las zonas de mayor calidad de disparos, y se vive la mejor era ofensiva de este deporte en muchos años.",
+            start: 2020,
+            end: 2025
+        }
     ];
 
-    const steps = groups.map(group => ({
-        title: `Temporadas ${group.label}`,
-        text: `Distribución de tiros desde ${group.start} hasta ${group.end}. Densidad de disparos combinados en ese período.`,
-        seasonStart: group.start,
-        seasonEnd: group.end
-    }));
-
-    document.querySelector(".scrollyteller__narration").innerHTML = steps.map(step => `
-        <div class="narration-step" data-season-start="${step.seasonStart}" data-season-end="${step.seasonEnd}">
+    document.getElementById("narration1").innerHTML = seasonSteps.map(step => `
+        <div class="narration-step" data-start="${step.start}" data-end="${step.end}">
             <h2>${step.title}</h2>
             <p>${step.text}</p>
         </div>
     `).join('');
 
     document.getElementById("st-graph").innerHTML = `
-        <div class="graph-title">Densidad de Tiros – <span id="filter-label">${steps[0].title}</span></div>
+        <div class="graph-title">Densidad de Tiros – <span id="filter-label">${seasonSteps[0].title}</span></div>
         <div id="scrolly-legend1" class="chart-legend2"></div>
         <div id="scrolly-graph"></div>
     `;
 
-    // render initial step with the first group range
     renderContourPlot("scrolly-graph", "all", {
-        seasonStart: steps[0].seasonStart,
-        seasonEnd: steps[0].seasonEnd,
+        seasonStart: seasonSteps[0].start,
+        seasonEnd: seasonSteps[0].end,
         legendId: "scrolly-legend1"
     });
 
     const scroller = scrollama();
-    scroller
-        .setup({ step: ".narration-step", offset: 0.5, debug: false })
+    scroller.setup({ step: "#narration1 .narration-step", offset: 0.5, debug: false })
         .onStepEnter(response => {
-            const start = +response.element.getAttribute("data-season-start");
-            const end = +response.element.getAttribute("data-season-end");
-            const labelSpan = document.getElementById("filter-label");
-            if (labelSpan) labelSpan.innerText = `Temporadas ${start} – ${end}`;
+            const start = +response.element.dataset.start;
+            const end   = +response.element.dataset.end;
+            const step  = seasonSteps.find(s => s.start === start && s.end === end);
+            if (step) {
+                document.getElementById("filter-label").innerText = step.title;
+            }
             renderContourPlot("scrolly-graph", "all", {
                 seasonStart: start,
                 seasonEnd: end,
@@ -583,336 +486,415 @@ async function setupScrollama() {
     window.addEventListener("resize", scroller.resize);
 }
 
-// ========================
-// SEGUNDO SCROLLYTELLER (métricas)
-// ========================
+// ──────────────── SCROLLYTELLER 2: ADVANCED METRICS HEATMAPS ────────────────
 function renderHeatmap(containerId, metric) {
     if (!shotData.length) return;
-    const width = 600, height = 510;
+    const W = 600, H = 510, BIN = 20;
+    const cols = Math.ceil(W / BIN), rows = Math.ceil(H / BIN);
+    const bins = new Array(cols * rows).fill(null).map(() => ({ sum:0, count:0 }));
 
-    const binSize = 30;
-    const cols = Math.ceil(width / binSize);
-    const rows = Math.ceil(height / binSize);
-    const bins = new Array(cols * rows).fill(null).map(() => ({ sum: 0, count: 0 }));
-
-    const mapX = (x) => ((x - RINK_X_MIN) / (RINK_X_MAX - RINK_X_MIN)) * width;
-    const mapY = (y) => height * (RINK_Y_MAX - y) / (RINK_Y_MAX - RINK_Y_MIN);
-
-    for (let i = 0; i < shotData.length; i++) {
-        const d = shotData[i];
-        const x = mapX(d.coordX);
-        const y = mapY(d.coordY);
-        if (x < 0 || x >= width || y < 0 || y >= height) continue;
-        const col = Math.floor(x / binSize);
-        const row = Math.floor(y / binSize);
-        const idx = row * cols + col;
+    for (const d of shotData) {
+        if (d.coordX > 89) continue;
+        const x = mapX(d.coordX, W), y = mapY(d.coordY, H);
+        if (x < 0 || x >= W || y < 0 || y >= H) continue;
+        const idx = Math.floor(y / BIN) * cols + Math.floor(x / BIN);
         bins[idx].sum += d[metric] || 0;
         bins[idx].count++;
     }
 
-    const maxAvg = Math.max(...bins.map(b => b.count ? b.sum / b.count : 0), 0.001);
+    const avgs = bins.filter(b => b.count > 0).map(b => b.sum / b.count);
+    if (!avgs.length) {
+        d3.select(`#${containerId}`).html("<p style='text-align:center;color:#555'>Sin datos para esta métrica</p>");
+        return;
+    }
+    let mn = d3.min(avgs), mx = d3.max(avgs);
+    if (mn === mx) { mn -= 0.001; mx += 0.001; }
+    const colour = d3.scaleSequential(d3.interpolateYlOrRd).domain([mn, mx]);
 
-    const container = d3.select(`#${containerId}`);
-    container.html("");
+    const svg = d3.select(`#${containerId}`).html("").append("svg")
+        .attr("viewBox", `0 0 ${W} ${H}`).attr("preserveAspectRatio", "xMidYMid meet").attr("width", W).attr("height", H);
+    svg.append("image").attr("href", RINK_IMAGE).attr("width", W).attr("height", H)
+        .attr("preserveAspectRatio", "none").style("opacity", 0.85);
 
-    const svg = container.append("svg")
-        .attr("viewBox", `0 0 ${width} ${height}`)
-        .attr("preserveAspectRatio", "xMidYMid meet")
-        .attr("width", width)
-        .attr("height", height);
-
-    svg.append("image")
-        .attr("href", RINK_IMAGE)
-        .attr("width", width)
-        .attr("height", height)
-        .attr("preserveAspectRatio", "none")
-        .style("opacity", 0.85);
-
-    const colorScale = d3.scaleSequential(d3.interpolateYlOrRd)
-        .domain([0, 1]);
-
-    for (let row = 0; row < rows; row++) {
-        for (let col = 0; col < cols; col++) {
-            const idx = row * cols + col;
-            const bin = bins[idx];
-            if (bin.count === 0) continue;
-            const avg = bin.sum / bin.count;
-            svg.append("rect")
-                .attr("x", col * binSize)
-                .attr("y", row * binSize)
-                .attr("width", binSize)
-                .attr("height", binSize)
-                .attr("fill", colorScale(avg))
-                .attr("stroke", "none")
-                .attr("opacity", 0.7);
-        }
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+        const b = bins[r * cols + c];
+        if (!b.count) continue;
+        svg.append("rect").attr("x", c*BIN).attr("y", r*BIN).attr("width", BIN).attr("height", BIN)
+            .attr("fill", colour(b.sum / b.count)).attr("opacity", 0.7);
     }
 
-    // Leyenda del segundo scrollyteller
-    const legend2 = document.getElementById("scrolly-legend2");
-    if (legend2) {
-        legend2.innerHTML = `
-            <div class="legend-gradient-group">
-                <div class="legend-label">${metric}</div>
-                <div class="legend-gradient-bar" style="background: linear-gradient(to right, #ffffcc, #800026);"></div>
-                <div class="legend-range">
-                    <span>0</span>
-                    <span>1</span>
-                </div>
-            </div>
-        `;
-    }
+    const leg = document.getElementById("scrolly-legend2");
+    if (leg) leg.innerHTML = `<div class="legend-gradient-group"><div class="legend-label">${metric}</div>
+        <div class="legend-gradient-bar" style="background:linear-gradient(to right,${colour(mn)},${colour(mx)})"></div>
+        <div class="legend-range"><span>${mn.toFixed(4)}</span><span>${mx.toFixed(4)}</span></div></div>`;
 }
 
 async function setupScrollama2() {
     const metrics = [
-        { id: "xGoal", title: "Expected Goals (xGoal)", text: "Probabilidad de que el tiro se convierta en gol." },
-        { id: "xFroze", title: "Congelamiento (xFroze)", text: "Probabilidad de que el portero congele el disco." },
-        { id: "xRebound", title: "Rebote (xRebound)", text: "Probabilidad de generar un rebote tras el tiro." },
-        { id: "xPlayStopped", title: "Parada del Juego (xPlayStopped)", text: "Probabilidad de que el juego se detenga." },
-        { id: "xShotWasOnGoal", title: "Tiro a Puerta (xShotWasOnGoal)", text: "Probabilidad de que el tiro vaya dirigido a la portería." }
+        { id:"xGoal",          title:"Probabilidad de gol (xGoal)",          text:"La probabilidad de gol se concentra justo frente a la red y decae rápidamente con la distancia y el ángulo." },
+        { id:"xRebound",       title:"Probabilidad de generar rebote (xRebound)",               text:"Los disparos desde cerca son los que más rebotes generan, aunque también se observa un aumento considerable en la probabilidad de los disparos con poco ángulo (cercanos a la línea de gol), y los disparos de larga distancia." },
+        { id:"xShotWasOnGoal", title:"Probabilidad de tiro a puerta (xShotWasOnGoal)",  text:"La probabilidad de que el tiro vaya a portería generalmente alta en casi todas partes, debido al alto nivel de los jugadores, sin embargo aún se puede apreciar ligeramente el aumento justo en frente de la portería, y un ligero decrecimiento con la distancia." },
     ];
 
-    const narrationContainer = document.getElementById("narration2");
-    narrationContainer.innerHTML = metrics.map((m, i) => `
-        <div class="narration-step2" data-metric="${m.id}">
-            <h2>${m.title}</h2>
-            <p>${m.text}</p>
-        </div>
-    `).join('');
-
-    const graphContainer = document.getElementById("st-graph2");
-    graphContainer.innerHTML = `
+    document.getElementById("narration2").innerHTML = metrics.map(m =>
+        `<div class="narration-step2" data-metric="${m.id}"><h2>${m.title}</h2><p>${m.text}</p></div>`).join("");
+    document.getElementById("st-graph2").innerHTML = `
         <div class="graph-title">Mapa de Calor – <span id="filter-label2">${metrics[0].title}</span></div>
-        <div id="scrolly-legend2" class="chart-legend2"></div>
-        <div id="scrolly-graph2"></div>
-    `;
+        <div id="scrolly-legend2" class="chart-legend2"></div><div id="scrolly-graph2"></div>`;
 
     renderHeatmap("scrolly-graph2", metrics[0].id);
 
-    const scroller2 = scrollama();
-    scroller2
-        .setup({
-            step: ".narration-step2",
-            offset: 0.5,
-            debug: false
-        })
-        .onStepEnter(response => {
-            const metric = response.element.getAttribute("data-metric");
-            const labelSpan = document.getElementById("filter-label2");
-            if (labelSpan) {
-                const meta = metrics.find(m => m.id === metric);
-                labelSpan.innerText = meta ? meta.title : metric;
-            }
-            renderHeatmap("scrolly-graph2", metric);
+    const scroller = scrollama();
+    scroller.setup({ step: "#narration2 .narration-step2", offset: 0.5, debug: false })
+        .onStepEnter(resp => {
+            const m = resp.element.dataset.metric;
+            const meta = metrics.find(x => x.id === m);
+            document.getElementById("filter-label2").innerText = meta ? meta.title : m;
+            renderHeatmap("scrolly-graph2", m);
         });
-
-    window.addEventListener("resize", scroller2.resize);
+    window.addEventListener("resize", scroller.resize);
 }
 
-// ========================
-// TERCER SCROLLYTELLER (métricas)
-// ========================
-function renderHeatmap(containerId, metric) {
-    if (!shotData.length) return;
-    const width = 600, height = 510;
-    const binSize = 20;
+// ──────────────── SCROLLYTELLER 3: FLOW MAPS ────────────────
+const CATEGORY_LABELS = {
+    "SHOT":"Tiro","MISSED_SHOT":"Tiro fallado","BLOCKED_SHOT":"Tiro bloqueado","GOAL":"Gol",
+    "HIT":"Golpe / Carga","GIVEAWAY":"Pérdida de disco","TAKEAWAY":"Recuperación de disco",
+    "FACEOFF":"Faceoff","PENALTY":"Penalización","DELPEN":"Penalización retrasada",
+    "STOP":"Parada del juego","PERIOD_END":"Fin del periodo","GAME_END":"Fin del partido",
+    "OFFSIDE":"Fuera de juego","ICING":"Icing","FACEOFF_WIN":"Faceoff ganado",
+};
 
-    const cols = Math.ceil(width / binSize);
-    const rows = Math.ceil(height / binSize);
-    const bins = new Array(cols * rows).fill(null).map(() => ({ sum: 0, count: 0 }));
+function renderFlowMap(containerId, category, dataSource) {
+    if (!dataSource?.length) return;
+    const W = 600, H = 510, BIN = 15;
+    const cols = Math.ceil(W / BIN), rows = Math.ceil(H / BIN);
 
-    const mapX = (x) => ((x - RINK_X_MIN) / (RINK_X_MAX - RINK_X_MIN)) * width;
-    const mapY = (y) => height * (RINK_Y_MAX - y) / (RINK_Y_MAX - RINK_Y_MIN);
+    const filtered = dataSource.filter(d => {
+        if (!d.lastEventCategory || d.lastEventCategory !== category) return false;
+        const lx = +d.lastEventXCord, ly = +d.lastEventYCord, sx = +d.coordX, sy = +d.coordY;
+        return ![lx, ly, sx, sy].some(isNaN);
+    });
 
-    for (let i = 0; i < shotData.length; i++) {
-        const d = shotData[i];
-        // Skip shots behind the net (x > 89 ft)
-        if (d.coordX > 89) continue;
+    const svg = d3.select(`#${containerId}`).html("").append("svg")
+        .attr("viewBox", `0 0 ${W} ${H}`).attr("preserveAspectRatio", "xMidYMid meet").attr("width", W).attr("height", H);
+    svg.append("image").attr("href", RINK_IMAGE).attr("width", W).attr("height", H)
+        .attr("preserveAspectRatio", "none").style("opacity", 0.85);
 
-        const x = mapX(d.coordX);
-        const y = mapY(d.coordY);
-        if (x < 0 || x >= width || y < 0 || y >= height) continue;
-        const col = Math.floor(x / binSize);
-        const row = Math.floor(y / binSize);
-        const idx = row * cols + col;
-        bins[idx].sum += d[metric] || 0;
-        bins[idx].count++;
-    }
-
-    const avgValues = bins.filter(b => b.count > 0).map(b => b.sum / b.count);
-    if (avgValues.length === 0) {
-        d3.select(`#${containerId}`).html("<p style='text-align:center;color:#555;'>Sin datos para esta métrica</p>");
+    if (!filtered.length) {
+        svg.append("text").attr("x",W/2).attr("y",H/2).attr("text-anchor","middle").attr("fill","#555")
+            .text("No hay datos para esta categoría");
         return;
     }
 
-    let minAvg = d3.min(avgValues);
-    let maxAvg = d3.max(avgValues);
-    if (minAvg === maxAvg) { minAvg -= 0.001; maxAvg += 0.001; }
+    const bins = new Map();
+    filtered.forEach(d => {
+        const ox = Math.floor(mapX(+d.lastEventXCord, W) / BIN);
+        const oy = Math.floor(mapY(+d.lastEventYCord, H) / BIN);
+        const dx = Math.floor(mapX(+d.coordX, W) / BIN);
+        const dy = Math.floor(mapY(+d.coordY, H) / BIN);
+        if ([ox,oy,dx,dy].some(v => v<0 || v>= (v===ox||v===dx?cols:rows))) return;
+        const key = `${ox},${oy}-${dx},${dy}`;
+        bins.set(key, (bins.get(key)||0) + 1);
+    });
 
-    const colorScale = d3.scaleSequential(d3.interpolateYlOrRd).domain([minAvg, maxAvg]);
+    const maxCount = Math.max(...bins.values(), 1);
+    const safeMax  = maxCount > 1 ? maxCount : 2;
+    const widthS   = d3.scaleSqrt().domain([1, safeMax]).range([0.5, 5]);
+    const opacityS = d3.scaleLog().domain([1, safeMax]).range([0.2, 0.8]).clamp(true);
+    const defs = svg.append("defs");
 
-    const container = d3.select(`#${containerId}`);
-    container.html("");
+    bins.forEach((count, key) => {
+        const [orig, dest] = key.split("-");
+        const [ox, oy] = orig.split(",").map(Number);
+        const [dx, dy] = dest.split(",").map(Number);
+        const x1 = ox*BIN + BIN/2, y1 = oy*BIN + BIN/2;
+        const x2 = dx*BIN + BIN/2, y2 = dy*BIN + BIN/2;
+        const midX = (x1+x2)/2 + (ox-dx)*0.3, midY = (y1+y2)/2 + (oy-dy)*0.3;
+        const gid = `g-${ox}-${oy}-${dx}-${dy}`;
+        defs.append("linearGradient").attr("id",gid).attr("gradientUnits","userSpaceOnUse")
+            .attr("x1",x1).attr("y1",y1).attr("x2",x2).attr("y2",y2)
+            .selectAll("stop").data([{o:"0%",c:COLOURS.sourceBlue},{o:"100%",c:COLOURS.targetRed}])
+            .enter().append("stop").attr("offset",d=>d.o).attr("stop-color",d=>d.c);
+        svg.append("path").attr("d",`M${x1},${y1} Q${midX},${midY} ${x2},${y2}`)
+            .attr("class","flow-line").attr("stroke",`url(#${gid})`)
+            .attr("stroke-width",widthS(count)).attr("opacity",opacityS(count));
+    });
 
-    const svg = container.append("svg")
-        .attr("viewBox", `0 0 ${width} ${height}`)
-        .attr("preserveAspectRatio", "xMidYMid meet")
-        .attr("width", width)
-        .attr("height", height);
-
-    svg.append("image")
-        .attr("href", RINK_IMAGE)
-        .attr("width", width)
-        .attr("height", height)
-        .attr("preserveAspectRatio", "none")
-        .style("opacity", 0.85);
-
-    for (let row = 0; row < rows; row++) {
-        for (let col = 0; col < cols; col++) {
-            const idx = row * cols + col;
-            const bin = bins[idx];
-            if (bin.count === 0) continue;
-            const avg = bin.sum / bin.count;
-            svg.append("rect")
-                .attr("x", col * binSize)
-                .attr("y", row * binSize)
-                .attr("width", binSize)
-                .attr("height", binSize)
-                .attr("fill", colorScale(avg))
-                .attr("stroke", "none")
-                .attr("opacity", 0.7);
-        }
-    }
-
-    const legend2 = document.getElementById("scrolly-legend2");
-    if (legend2) {
-        legend2.innerHTML = `
-            <div class="legend-gradient-group">
-                <div class="legend-label">${metric}</div>
-                <div class="legend-gradient-bar" style="background: linear-gradient(to right, ${colorScale(minAvg)}, ${colorScale(maxAvg)});"></div>
-                <div class="legend-range">
-                    <span>${minAvg.toFixed(4)}</span>
-                    <span>${maxAvg.toFixed(4)}</span>
-                </div>
-            </div>
-        `;
-    }
+    const leg = document.getElementById("scrolly-legend3");
+    if (leg) leg.innerHTML = `<div class="legend-gradient-group">
+        <div class="legend-label">Flujo de tiros (${filtered.length.toLocaleString("es-ES")} disparos)</div>
+        <div style="display:flex;align-items:center;gap:0.4rem;margin:0.2rem 0">
+            <span style="display:inline-block;width:18px;height:8px;background:${COLOURS.sourceBlue}"></span><span style="font-size:0.65rem">Posición evento anterior</span>
+            <span style="display:inline-block;width:18px;height:8px;background:${COLOURS.targetRed}"></span><span style="font-size:0.65rem">Posición tiro</span></div>
+        <div class="legend-range"></div></div>`;
 }
 
 function setupScrollama3() {
-    const categoryLabels = {
-        "SHOT": "Tiro",
-        "MISSED_SHOT": "Tiro fallado",
-        "BLOCKED_SHOT": "Tiro bloqueado",
-        "GOAL": "Gol",
-        "HIT": "Golpe / Carga",
-        "GIVEAWAY": "Pérdida de disco",
-        "TAKEAWAY": "Recuperación de disco",
-        "FACEOFF": "Faceoff",
-        "PENALTY": "Penalización",
-        "DELPEN": "Penalización retrasada",
-        "STOP": "Parada del juego",
-        "PERIOD_END": "Fin del periodo",
-        "GAME_END": "Fin del partido",
-        "OFFSIDE": "Fuera de juego",
-        "ICING": "Icing",
-        "FACEOFF_WIN": "Faceoff ganado"
-    };
-
-    let sourceData = shotData.filter(d => d.isPlayoffGame === true);
-    let dataSourceText = "playoffs";
-    if (sourceData.length === 0) {
-        sourceData = shotData;
-        dataSourceText = "toda la temporada (no se encontraron tiros de playoffs)";
+    let source = shotData.filter(d => d.isPlayoffGame);
+    let sourceLabel = "playoffs";
+    if (!source.length) {
+        source = shotData;
+        sourceLabel = "toda la temporada (no se encontraron playoffs)";
     }
 
-    const categories = [...new Set(sourceData.map(d => d.lastEventCategory).filter(Boolean))];
-    if (categories.length === 0) {
-        document.getElementById("narration3").innerHTML = `
-            <div class="narration-step3" style="height:auto; text-align:center;">
-                <h2>Sin datos de evento previo</h2>
-                <p>No se pudo encontrar la columna <em>lastEventCategory</em> en los registros de ${dataSourceText}.</p>
-            </div>`;
-        document.getElementById("st-graph3").innerHTML = `
-            <div style="display:flex; align-items:center; justify-content:center; height:100%; color:#555;">
-                <p>Gráfico no disponible.</p>
-            </div>`;
-        return;
+    const FLOW_CATEGORIES = [
+        { id: "SHOT",          title: "Tiro que genera rebote",                text: "Estos disparos que generan rebote tras una parada son especialmente interesantes analíticamente, ya que con el portero en una posición desfavorable, el siguiente disparo tiene más probabilidades de ser exitoso." },
+        { id: "MISS",   title: "Tiro fallado",        text: "Un tiro que no va a puerta a menudo rebota lejos de la acción debido a la alta velocidad y al hielo resbaladizo." },
+        { id: "BLOCK",  title: "Tiro bloqueado",      text: "Cuando un defensor bloquea el tiro, el disco puede generar un rebote o salir despedido fuera de la zona azul, desde donde el ataque tendrá que volver a empezar de cero." },
+        { id: "HIT",           title: "Hit",       text: "Un golpe puede liberar el disco y cambiar la posesión, iniciando una transición rápida hacia la portería, en ocasiones con un defensor fuera de posición." },
+        { id: "FAC",       title: "Faceoff",             text: "El faceoff es una jugada ensayada; los equipos ganan la posesión y disparan desde posiciones predefinidas." },
+    ];
+
+    const steps = [];
+    for (const config of FLOW_CATEGORIES) {
+        const count = source.filter(d => d.lastEventCategory === config.id).length;
+        if (count > 0) {
+            steps.push({
+                category: config.id,
+                title: `${config.title} (${config.id})`,
+                text: config.text,
+                count: count
+            });
+        }
     }
 
-    const counts = {};
-    categories.forEach(cat => {
-        counts[cat] = sourceData.filter(d => d.lastEventCategory === cat).length;
-    });
-    const sortedCats = categories.sort((a, b) => counts[b] - counts[a]).slice(0, 8);
+    // Construir la narración
+    document.getElementById("narration3").innerHTML = steps.map(step => `
+        <div class="narration-step3" data-category="${step.category}">
+            <h2>${step.title}</h2>
+            <p>${step.text} <br><small>(${step.count.toLocaleString("es-ES")} disparos en ${sourceLabel})</small></p>
+        </div>
+    `).join('');
 
-    document.getElementById("narration3").innerHTML = sortedCats.map(cat => {
-        const count = counts[cat] || 0;
-        const label = categoryLabels[cat] || cat;
-        const safeCat = cat.replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        return `
-        <div class="narration-step3" data-category="${safeCat}">
-            <h2>${label} (${cat})</h2>
-            <p>Disparos precedidos por <strong>${label.toLowerCase()}</strong> (datos de ${dataSourceText}): ${count.toLocaleString('es-ES')}.</p>
-        </div>`;
-    }).join('');
-
+    // Preparar el gráfico
     document.getElementById("st-graph3").innerHTML = `
-        <div class="graph-title">Flujo Pre‑Tiro – <span id="filter-label3">${categoryLabels[sortedCats[0]] || sortedCats[0]}</span></div>
+        <div class="graph-title">Flujo Pre‑Tiro – <span id="filter-label3">${steps[0].title}</span></div>
         <div id="scrolly-legend3" class="chart-legend2"></div>
         <div id="scrolly-graph3"></div>
     `;
 
-    renderFlowMap("scrolly-graph3", sortedCats[0], sourceData);
+    renderFlowMap("scrolly-graph3", steps[0].category, source);
 
-    const scroller3 = scrollama();
-    scroller3
-        .setup({
-            step: "#narration3 .narration-step3",
-            offset: 0.5,
-            debug: false
-        })
+    const scroller = scrollama();
+    scroller.setup({ step: "#narration3 .narration-step3", offset: 0.5, debug: false })
         .onStepEnter(response => {
-            const category = response.element.getAttribute("data-category");
-            const label = categoryLabels[category] || category;
-            document.getElementById("filter-label3").innerText = label;
-            renderFlowMap("scrolly-graph3", category, sourceData);
+            const cat = response.element.dataset.category;
+            const step = steps.find(s => s.category === cat);
+            if (step) {
+                document.getElementById("filter-label3").innerText = step.title;
+            }
+            renderFlowMap("scrolly-graph3", cat, source);
         });
 
-    window.addEventListener("resize", scroller3.resize);
+    window.addEventListener("resize", scroller.resize);
 }
 
-// ========================
-// INICIALIZACIÓN
-// ========================
+// ──────────────── SCROLLYTELLER 4: SCATTERPLOTS ────────────────
+function renderScatterplots(containerId, dataArray, plotConfigs) {
+    const container = d3.select(`#${containerId}`).html("");
+    if (!dataArray?.length) { container.append("p").style("text-align","center").text("No hay datos."); return; }
+    const grid = container.append("div").attr("class","scatter-grid");
+
+    plotConfigs.forEach(cfg => {
+        const xKey = cfg.xKey || "avgXGoal";
+        const valid = dataArray.filter(d =>
+            d[xKey] != null && d[cfg.yKey] != null && isFinite(d[xKey]) && isFinite(d[cfg.yKey]));
+        if (valid.length < 5) return;
+
+        const W = 440, H = 300, margin = { top:25, right:25, bottom:48, left:60 };
+        const div = grid.append("div").attr("class","scatter-plot");
+        div.append("div").style("text-align","center").style("font-weight","bold").style("font-size","0.85rem").text(cfg.yLabel);
+        const svg = div.append("svg").attr("width",W).attr("height",H);
+
+        const xExt = d3.extent(valid, d => d[xKey]);
+        const yExt = d3.extent(valid, d => d[cfg.yKey]);
+        const pad = (ext) => (ext[1]-ext[0])*0.05 || 0.1;
+        const xDom = [xExt[0]-pad(xExt), xExt[1]+pad(xExt)];
+        const yDom = [yExt[0]-pad(yExt), yExt[1]+pad(yExt)];
+
+        const xS = d3.scaleLinear().domain(xDom).range([margin.left, W-margin.right]).nice();
+        const yS = d3.scaleLinear().domain(yDom)
+            .range(cfg.invertY ? [margin.top, H-margin.bottom] : [H-margin.bottom, margin.top]).nice();
+
+        svg.append("g").attr("transform",`translate(0,${H-margin.bottom})`).call(d3.axisBottom(xS).ticks(5));
+        svg.append("g").attr("transform",`translate(${margin.left},0)`).call(d3.axisLeft(yS).ticks(5));
+
+        const xLabel = xKey==="avgXGoal"?"xGoal medio por tiro":xKey==="sumXGoal"?"xGoals":
+                       xKey==="reboundRate"?"Tasa de rebotes":xKey==="diffReboundRate"?"Dif. tasa rebotes (ataq−def)":"Dif. xGoal medio (ataq−def)";
+        svg.append("text").attr("x",W/2).attr("y",H-6).attr("text-anchor","middle").style("font-size","0.7rem").text(xLabel);
+        svg.append("text").attr("transform","rotate(-90)").attr("x",-H/2).attr("y",14).attr("text-anchor","middle").style("font-size","0.7rem").text(cfg.yLabel);
+
+        svg.selectAll("circle").data(valid).enter().append("circle")
+            .attr("cx",d=>xS(d[xKey])).attr("cy",d=>yS(d[cfg.yKey])).attr("r",3)
+            .attr("fill",COLOURS.sky).attr("opacity",0.7);
+
+        if (valid.length > 2) {
+            const reg = linearRegression(valid.map(d=>d[xKey]), valid.map(d=>d[cfg.yKey]));
+            if (reg) {
+                const y1 = reg.slope*xDom[0]+reg.intercept, y2 = reg.slope*xDom[1]+reg.intercept;
+                svg.append("line").attr("x1",xS(xDom[0])).attr("y1",yS(y1)).attr("x2",xS(xDom[1])).attr("y2",yS(y2))
+                    .attr("stroke",COLOURS.red).attr("stroke-width",2).attr("stroke-dasharray","5,3");
+            }
+        }
+    });
+}
+
+function setupScrollama4() {
+    const m = computeSeasonMetrics();
+    if (!m) return;
+
+    const toArray = (obj) => Object.entries(obj).map(([k,v]) => ({...v, key:k}));
+    const players  = toArray(m.players).filter(d => d.shotCount >= MIN_SHOTS_PLAYERS && d.avgXGoal != null);
+    const goalies  = toArray(m.goalies).filter(d => d.shotCount >= MIN_SHOTS_GOALIES && d.avgXGoal != null);
+
+    const teams = [];
+    for (const [k, sv] of Object.entries(m.teamsShooter)) {
+        const gv = m.teamsGoalie[k];
+        if (!gv) continue;
+        teams.push({
+            key:k,
+            diffAvgXGoal: sv.avgXGoal - gv.avgXGoal,
+            diffReboundRate: (sv.reboundRate ?? 0) - (gv.reboundRate ?? 0),
+            shooterTeamSeasonRank: sv.rank,
+        });
+    }
+
+    const steps = [
+        { title:"Jugadores de campo –> xGoal vs rendimiento",
+          text:"Unos tiros desde zonas de mayor calidad, se reflejan en un mejor porcentaje de acierto a lo largo de la temporada. Lo que sumado a lo largo de la temporada, y a un volumen de tiros que lo acompañe, acaba resultando también más goles",
+          data:players, plots:[
+              {yKey:"shooterSeasonGoals",yLabel:"Goles",xKey:"sumXGoal"},
+              {yKey:"shooterShootingPct",yLabel:"% de tiro",xKey:"avgXGoal"}]},
+        { title:"Jugadores de campo –> Impacto de los rebotes",
+          text:"Los tiradores que realizan tiros después de un rebote, suelen estar en las zonas correctas, o aprovecharse de una mala situación del portero, lo que también influye positivamente tanto en su porcentaje de tiro como en su número total de goles.",
+          data:players, plots:[
+              {yKey:"shooterSeasonGoals",yLabel:"Goles",xKey:"reboundRate"},
+              {yKey:"shooterShootingPct",yLabel:"% de tiro",xKey:"reboundRate"}]},
+        { title:"Porteros – xGoal en contra vs rendimiento",
+          text:"Unos tiros desde zonas de mayor calidad en contra (más peligrosos), se reflejan obviamente en un peor porcentaje de paradas, sin embargo esta influencia no es tan grande en el número de victorias. Esto es normal ya que los porteros no suelen jugar el mismo número de partidos, y dependen de sus jugadores de campo marcando goles para obtener las victorias.",
+          data:goalies, plots:[
+              {yKey:"goalieSeasonWins",yLabel:"Victorias",xKey:"avgXGoal"},
+              {yKey:"goalieSavePct",yLabel:"% de paradas",xKey:"avgXGoal"}]},
+        { title:"Porteros – Impacto de los rebotes",
+          text:"Cuando un portero enfrenta más tiros de rebote, su porcentaje de paradas disminuye. De nuevo el número de victorias no se ve tan afectado debido a las mismas causas mencionadas con anterioridad.",
+          data:goalies, plots:[
+              {yKey:"goalieSeasonWins",yLabel:"Victorias",xKey:"reboundRate"},
+              {yKey:"goalieSavePct",yLabel:"% de paradas",xKey:"reboundRate"}]},
+        { title:"Clasificación de Equipos – Balance ofensivo‑defensivo",
+          text:"La métrica a observar en estos gráficos es la diferencia entre la calidad de los disparos generados por un equipo, y la calidad de los tiros en contra hacia su portero. Podemos observar que esta métrica tiene una correlacción altísima con la clasificación final del equipo, mejorando la clasificación a medida que mejora la calidad de los tiros propios. También calculamos la diferencia entre ataque y defensa con la tasa de rebotes, con la que se observa que la influencia en la clasificación es menor pero no nula.",
+          data:teams, plots:[
+              {yKey:"shooterTeamSeasonRank",yLabel:"Ranking",xKey:"diffAvgXGoal",invertY:true},
+              {yKey:"shooterTeamSeasonRank",yLabel:"Ranking",xKey:"diffReboundRate",invertY:true}]},
+    ];
+
+    document.getElementById("narration4").innerHTML = steps.map((s,i) =>
+        `<div class="narration-step4" data-step="${i}"><h2>${s.title}</h2><p>${s.text}</p></div>`).join("");
+    document.getElementById("st-graph4").innerHTML = `<div id="scrolly-graph4" style="width:100%"></div>`;
+
+    renderScatterplots("scrolly-graph4", steps[0].data, steps[0].plots);
+
+    const scroller = scrollama();
+    scroller.setup({ step:"#narration4 .narration-step4", offset:0.5, debug:false })
+        .onStepEnter(resp => {
+            const s = steps[+resp.element.dataset.step];
+            renderScatterplots("scrolly-graph4", s.data, s.plots);
+        });
+    window.addEventListener("resize", scroller.resize);
+}
+
+// ──────────────── SECTION 5: PLAYER CAREER CHARTS ────────────────
+function renderPlayerCareerCharts(containerId, playerName, metrics) {
+    const container = d3.select(`#${containerId}`);
+    const playerData = Object.entries(metrics.players)
+        .map(([k,v]) => { const [name,season] = k.split("||"); return {...v, name, season:+season}; })
+        .filter(d => d.name === playerName && d.season >= 2013)
+        .sort((a,b) => a.season - b.season);
+
+    if (!playerData.length) {
+        container.html("<p style='text-align:center;padding:2rem'>No hay datos para este jugador.</p>");
+        return;
+    }
+
+    container.html(`
+        <div class="mini-chart" id="chart-xgoal-pct" style="width:380px;height:300px"></div>
+        <div class="mini-chart" id="chart-sumxgoal-goals" style="width:380px;height:300px"></div>
+    `);
+
+    const seasons = playerData.map(d => d.season);
+    const W = 380, H = 260, margin = { top:25, right:30, bottom:45, left:55 };
+
+    function drawChart(divId, k1, l1, c1, k2, l2, c2, fmt) {
+        const svg = d3.select(`#${divId}`).html("").append("svg")
+            .attr("viewBox",`0 0 ${W} ${H}`).attr("preserveAspectRatio","xMidYMid meet")
+            .attr("width","100%").attr("height","100%");
+
+        const xS = d3.scalePoint().domain(seasons.map(String))
+            .range([margin.left, W-margin.right]).padding(0.5);
+
+        const allVals = playerData.flatMap(d => [d[k1],d[k2]]).filter(v => v!=null && isFinite(v));
+        const ext = d3.extent(allVals);
+        const yS = d3.scaleLinear().domain([ext[0]*0.9, ext[1]*1.1])
+            .range([H-margin.bottom, margin.top]).nice();
+
+        svg.append("g").attr("transform",`translate(0,${H-margin.bottom})`)
+            .call(d3.axisBottom(xS).tickValues(seasons.filter(s=>s%2===0).map(String)));
+        svg.append("g").attr("transform",`translate(${margin.left},0)`)
+            .call(d3.axisLeft(yS).ticks(5).tickFormat(d3.format(fmt)));
+
+        const drawLine = (key, col) => {
+            const vd = playerData.filter(d => d[key]!=null && isFinite(d[key]));
+            if (vd.length < 2) return;
+            const line = d3.line().x(d=>xS(String(d.season))).y(d=>yS(d[key])).curve(d3.curveMonotoneX);
+            svg.append("path").datum(vd).attr("fill","none").attr("stroke",col).attr("stroke-width",2.5).attr("d",line);
+            svg.selectAll(`.d-${key}`).data(vd).enter().append("circle")
+                .attr("cx",d=>xS(String(d.season))).attr("cy",d=>yS(d[key])).attr("r",3.5).attr("fill",col);
+        };
+
+        drawLine(k1, c1);
+        drawLine(k2, c2);
+
+        const leg = svg.append("g").attr("transform",`translate(${margin.left+8},${margin.top+8})`);
+        [{k:k1,l:l1,c:c1},{k:k2,l:l2,c:c2}].forEach((item,i) => {
+            const y = i*20;
+            leg.append("line").attr("x1",0).attr("x2",18).attr("y1",y).attr("y2",y).attr("stroke",item.c).attr("stroke-width",2.5);
+            leg.append("text").attr("x",24).attr("y",y+4).text(item.l).style("font-size","0.7rem").attr("fill","#333");
+        });
+    }
+
+    drawChart("chart-xgoal-pct",     "avgXGoal","xGoal prom.",COLOURS.blue,
+              "shooterShootingPct","% tiro",COLOURS.orange,".2f");
+    drawChart("chart-sumxgoal-goals","sumXGoal","xGoal total",COLOURS.blue,
+              "shooterSeasonGoals","Goles",COLOURS.green,"d");
+}
+
+// ──────────────── INIT ────────────────
 async function init() {
     const overlay = document.getElementById("loading-overlay");
     if (overlay) overlay.classList.add("show");
 
     const loaded = await loadShotData({
-        onProgress: (loadedCount, total) => {
-            const pct = Math.round((loadedCount / total) * 100);
-            const textEl = overlay?.querySelector(".loading-text");
-            if (textEl) textEl.textContent = `Cargando datos… ${pct}%`;
-            renderHeroChart();
+        onProgress: (done, total) => {
+            const pct = Math.round((done/total)*100);
+            const el = overlay?.querySelector(".loading-text");
+            if (el) el.textContent = `Cargando datos… ${pct}%`;
+            if (shotData.length) renderHeroChart();
         }
     });
 
     if (overlay) overlay.classList.remove("show");
+    if (!loaded) return;
 
-    if (loaded) {
-        populateFilters();
-        setupHeroListeners();
-        renderHeroChart();
-        await new Promise(r => setTimeout(r, 100));
-        setupScrollama();
-        await new Promise(r => setTimeout(r, 200));
-        setupScrollama2();
-        await new Promise(r => setTimeout(r, 300));
-        console.log("Iniciando setupScrollama3");
-        setupScrollama3();
-    }
+    populateFilters();
+    setupHeroListeners();
+    renderHeroChart();
+
+    const delay = ms => new Promise(r => setTimeout(r, ms));
+    await delay(100); setupScrollama2();
+    await delay(100); setupScrollama1();
+    await delay(100); setupScrollama3();
+    await delay(100); setupScrollama4();
+    await delay(100);
+    renderPlayerCareerCharts("mackinnon-charts", "Nathan MacKinnon", computeSeasonMetrics());
 }
 
 init();

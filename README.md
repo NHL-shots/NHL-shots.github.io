@@ -1,1 +1,0 @@
-# NHL-shots.github.io

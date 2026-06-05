@@ -9,15 +9,14 @@
     <link rel="stylesheet" href="styles.css">
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <script src="https://unpkg.com/scrollama"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@ihmeuw/scrollyteller@1.0.2/dist/lib.js"></script>
 </head>
 <body>
+    <!-- ═══════════ HERO ═══════════ -->
     <div class="hero-section">
         <div class="hero-body">
             <aside class="hero-sidebar">
-                <h1 class="hero-title">Análisis de Tiros NHL 2025</h1>
+                <h1 class="hero-title">Análisis de Tiros<br>NHL 2007–2025</h1>
                 <div class="hero-controls">
-                    <!-- DROPDOWNS -->
                     <div class="filter-group">
                         <label for="hero-shottype">Tipo de Tiro</label>
                         <select id="hero-shottype" class="form-select form-select-sm">
@@ -49,24 +48,21 @@
                         </select>
                     </div>
                     <div class="filter-group">
-                        <label for="hero-shotoutcome">Resultado del Tiro (Detalle)</label>
+                        <label for="hero-shotoutcome">Resultado del Tiro</label>
                         <select id="hero-shotoutcome" class="form-select form-select-sm">
                             <option value="all">Todos</option>
                         </select>
                     </div>
-
                     <hr>
-
-                    <!-- RADIO BUTTONS -->
                     <div class="filter-group">
-                        <label>Resultado del Tiro</label>
+                        <label>Resultado</label>
                         <div class="btn-group w-100" role="group">
                             <input type="radio" class="btn-check" name="goal-result" value="all" id="goal-all" checked>
                             <label class="btn btn-outline-light btn-sm" for="goal-all">Todos</label>
                             <input type="radio" class="btn-check" name="goal-result" value="goals" id="goal-goals">
                             <label class="btn btn-outline-light btn-sm" for="goal-goals">Goles</label>
                             <input type="radio" class="btn-check" name="goal-result" value="non-goals" id="goal-missed">
-                            <label class="btn btn-outline-light btn-sm" for="goal-missed">Fallados/Atajados</label>
+                            <label class="btn btn-outline-light btn-sm" for="goal-missed">Fallados</label>
                         </div>
                     </div>
                     <div class="filter-group">
@@ -75,13 +71,13 @@
                             <input type="radio" class="btn-check" name="hand" value="all" id="hand-all" checked>
                             <label class="btn btn-outline-light btn-sm" for="hand-all">Todos</label>
                             <input type="radio" class="btn-check" name="hand" value="L" id="hand-left">
-                            <label class="btn btn-outline-light btn-sm" for="hand-left">Izquierda</label>
+                            <label class="btn btn-outline-light btn-sm" for="hand-left">Izq.</label>
                             <input type="radio" class="btn-check" name="hand" value="R" id="hand-right">
-                            <label class="btn btn-outline-light btn-sm" for="hand-right">Derecha</label>
+                            <label class="btn btn-outline-light btn-sm" for="hand-right">Der.</label>
                         </div>
                     </div>
                     <div class="filter-group">
-                        <label>Partido de Playoff</label>
+                        <label>Playoff</label>
                         <div class="btn-group w-100" role="group">
                             <input type="radio" class="btn-check" name="playoff" value="all" id="playoff-all" checked>
                             <label class="btn btn-outline-light btn-sm" for="playoff-all">Todos</label>
@@ -91,33 +87,29 @@
                             <label class="btn btn-outline-light btn-sm" for="playoff-no">No</label>
                         </div>
                     </div>
-
                     <hr>
-
-                    <!-- BÚSQUEDAS -->
                     <div class="filter-group">
-                        <label for="hero-shooter">Nombre del Tirador</label>
-                        <input type="text" id="hero-shooter" list="shooter-list" class="form-control form-control-sm" placeholder="Buscar tirador...">
+                        <label for="hero-shooter">Tirador</label>
+                        <input type="text" id="hero-shooter" list="shooter-list" class="form-control form-control-sm" placeholder="Buscar…">
                         <datalist id="shooter-list"></datalist>
                     </div>
                     <div class="filter-group">
-                        <label for="hero-goalie">Nombre del Portero</label>
-                        <input type="text" id="hero-goalie" list="goalie-list" class="form-control form-control-sm" placeholder="Buscar portero...">
+                        <label for="hero-goalie">Portero</label>
+                        <input type="text" id="hero-goalie" list="goalie-list" class="form-control form-control-sm" placeholder="Buscar…">
                         <datalist id="goalie-list"></datalist>
                     </div>
                     <div class="filter-group">
-                        <label for="hero-team">Equipo del Tirador</label>
-                        <input type="text" id="hero-team" list="team-list" class="form-control form-control-sm" placeholder="Buscar equipo...">
+                        <label for="hero-team">Equipo Tirador</label>
+                        <input type="text" id="hero-team" list="team-list" class="form-control form-control-sm" placeholder="Buscar…">
                         <datalist id="team-list"></datalist>
                     </div>
                     <div class="filter-group">
-                        <label for="hero-goalieteam">Equipo del Portero</label>
-                        <input type="text" id="hero-goalieteam" list="goalieteam-list" class="form-control form-control-sm" placeholder="Buscar equipo del portero...">
+                        <label for="hero-goalieteam">Equipo Portero</label>
+                        <input type="text" id="hero-goalieteam" list="goalieteam-list" class="form-control form-control-sm" placeholder="Buscar…">
                         <datalist id="goalieteam-list"></datalist>
                     </div>
                 </div>
             </aside>
-
             <div class="hero-chart-container">
                 <div id="loading-overlay" class="loading-overlay show">
                     <div class="loading-text">Cargando datos… 0%</div>
@@ -128,40 +120,62 @@
         </div>
     </div>
 
-    <!-- Intro narrativo temporadas -->
+    <!-- ═══════════ SECCIÓN 1: MÉTRICAS AVANZADAS ═══════════ -->
     <div class="narrative-intro">
-        <h2>Evolución Histórica de los Tiros en la NHL</h2>
-        <p>Desde 2007 hasta 2025, explorá cómo cambiaron las zonas de disparo, la efectividad y los patrones de juego temporada a temporada.</p>
+        <h2>1. Zonas de calidad: Métricas avanzadas</h2>
+        <p>Cualquier persona que haya visto un partido antes, sabe que no todos los tiros son iguales, ni tienen la misma probabilidad de acabar al fondo de la red. Los modelos estadísticos nos permiten asignar a cada disparo una probabilidad de gol (xGoal), de generar rebote (xRebound) o de simplemente ir a puerta. Usando estas métricas, podemos dibujar un mapa de calor sobre el hielo, dando a conocer que zonas aportan calidad a los tiros.</p>
     </div>
-
-    <!-- Primer ScrollyTeller: temporadas -->
-    <div id="scrollyteller-app" class="scrollyteller">
-        <div class="scrollyteller__narration"></div>
-        <div id="st-graph" class="scrollyteller__graph"></div>
-    </div>
-
-    <!-- Intro métricas avanzadas -->
-    <div class="narrative-intro">
-        <h2>Métricas Avanzadas de Tiros</h2>
-        <p>Probabilidad de gol, rebote, congelamiento del disco y otras métricas según la ubicación del disparo.</p>
-    </div>
-
-    <!-- Segundo ScrollyTeller: métricas -->
     <div id="scrollyteller-app2" class="scrollyteller">
         <div class="scrollyteller__narration" id="narration2"></div>
         <div id="st-graph2" class="scrollyteller__graph"></div>
     </div>
 
-    <!-- Intro narrativa flujos -->
+    <!-- ═══════════ SECCIÓN 2: EVOLUCIÓN TEMPORAL ═══════════ -->
     <div class="narrative-intro">
-        <h2>¿De dónde vienen los tiros?</h2>
-        <p>Cada disparo tiene una historia. Analizamos el evento anterior (pase, rebote, golpe, pérdida…) y la trayectoria que recorre el disco hasta el momento del lanzamiento.</p>
+        <h2>2. Evolución histórica de los tiros</h2>
+        <p>Desde 2007 hasta 2025, la NHL ha vivido una transformación táctica. La era analítica ha cambiado dónde y cómo se lanza el disco, y como los equipos se adaptan a usar las zonas de calidad. En los siguientes gráficos podemos ver como evolucionó la densidad de tiros a lo largo de las temporadas.</p>
+    </div>
+        <div id="scrollyteller-app" class="scrollyteller">
+        <div class="scrollyteller__narration" id="narration1"></div>
+        <div id="st-graph" class="scrollyteller__graph"></div>
     </div>
 
-    <!-- Tercer ScrollyTeller: flujos pre-tiro -->
+    <!-- ═══════════ SECCIÓN 3: FLUJOS DE JUEGO ═══════════ -->
+    <div class="narrative-intro">
+        <h2>3. Lo que pasa antes del tiro importa</h2>
+        <p>Cada tiro proviene por ejemplo de un rebote, un hit, un bloqueo o un faceoff. El tipo de evento que lo precede acaba determinando desde dónde y hacia dónde viaja el disco, y por tanto en parte determina la posición de tiro, e indirectamente su calidad. Analizamos estos flujos de eventos en playoffs, para reducir el número total de disparos y permitir observar mejor las tendencias.</p>
+    </div>
     <div id="scrollyteller-app3" class="scrollyteller">
         <div class="scrollyteller__narration" id="narration3"></div>
         <div id="st-graph3" class="scrollyteller__graph"></div>
+    </div>
+
+    <!-- ═══════════ SECCIÓN 4: CORRELACIONES ═══════════ -->
+    <div class="narrative-intro">
+        <h2>4. Entonces, ¿es el xGoal la clave para el éxito?</h2>
+        <p>Si los tiros de un jugador provienen de zonas de calidad, ¿anota más goles? ¿Tiene mejor puntería? ¿Y los porteros: tiros desde zonas de mayor calidad en contra significa peores métricas? ¿Se refleja el balance ofensivo‑defensivo de un equipo en su clasificación? En los siguientes gráficos vemos la correlacción entre estos factores, así como con el uso de los rebotes. Para los jugadores de campo hemos filtrado aquellos con más de 100 tiros por temporada y para los porteros, aquellos que hayan enfrentado al menos 1000 tiros, para tener una muestra representativa.</p>
+    </div>
+    <div id="scrollyteller-app4" class="scrollyteller">
+        <div class="scrollyteller__narration" id="narration4"></div>
+        <div id="st-graph4" class="scrollyteller__graph"></div>
+    </div>
+
+    <!-- ═══════════ SECCIÓN 5: MACKINNON ═══════════ -->
+    <div class="narrative-intro">
+        <h2>5. La evolución de una estrella</h2>
+        <p>Nathan MacKinnon debutó en 2013 y recientemente ha sido uno de los centrales más dominantes de la liga, pero no fue así desde su inicio. ¿Cómo conseguió desarrollarse al estrellato y como influenció la introducción de estas analíticas a su mejora?</p>
+    </div>
+    <div class="static-player-section">
+        <div class="player-text-full">
+            <h3>Nathan MacKinnon</h3>
+            <p>
+                El gráfico izquierdo, nos muestra como evoluciona el porcentaje de acierto de sus tiros, junto a la evolución de la calidad media de sus tiros, o lo que es lo mismo, su uso de las zonas de calidad en el hielo. Ignorando los pequeños cambios atribuibles a la suerte y al rendimiento de sus oponentes, podemos observar claras similitudes entre ambas tendencias, que corroboran la correlacción previamente observada en la sección anterior.
+            </p>
+            <p>
+                El gráfico derecho se observa una similitud incluso superior entre las métricas graficadas, a saber, el número de goles esperado estadísticamente según el número de disparos y la zona de tiro de estos; frente al número real de goles marcados esa temporada. Nuevamente ignorando el año del covid 2020, y un "mal" año individual en 2024, también se aprecia una clara mejora que ha llevado a Nathan a ser la superestrella que es hoy en día.
+            </p>
+        </div>
+        <div class="player-charts-row" id="mackinnon-charts"></div>
     </div>
 
     <script src="main.js"></script>
