@@ -3,6 +3,8 @@
    Scrollytelling con D3 + Scrollama
    ═══════════════════════════════════════════════════════════ */
 
+import { parquetReadObjects } from 'hyparquet';
+
 // ──────────────── CONSTANTS ────────────────
 const RINK_IMAGE    = "hockeyRink.jpg";
 const RINK_X_MIN   = 0;
@@ -68,91 +70,140 @@ const isReboundEvent = (cat) =>
     String(cat ?? "").trim().toUpperCase() === "SHOT";
 
 // ──────────────── DATA LOADING ────────────────
+// Helper: safely convert ANY value (float, int, BigInt, string, null) to a number
+function safeNumber(val) {
+    if (val === undefined || val === null || val === '') return 0;
+    const num = Number(val);
+    return isNaN(num) ? 0 : num;
+}
+
+function mapRowToShot(d) {
+    return {
+        // Coordinates (floats – safe, but safeNumber handles them anyway)
+        coordX:  safeNumber(d.coordX) || safeNumber(d.arenaAdjustedXCordAbs) || 0,
+        coordY:  safeNumber(d.coordY) || safeNumber(d.arenaAdjustedYCord) || 0,
+
+        // Booleans / strings (unchanged)
+        isGoal:  parseBool(d.goal),
+        goal:    d.goal,
+        shotType:           d.shotType            || "",
+        season:             String(d.season || "").trim(), // season is safe
+        isPlayoffGame:      parseBool(d.isPlayoffGame),
+
+        // ⚠️ THE CULPRITS – these are often integers in Parquet:
+        period:             safeNumber(d.period), // ← likely the one causing the error!
+        time:               d.time                || "",
+        timeUntilNextEvent: d.timeUntilNextEvent  || "",
+        timeSinceLastEvent: d.timeSinceLastEvent  || "",
+        timeSinceFaceoff:   d.timeSinceFaceoff    || "",
+        shooterTimeOnIce:   d.shooterTimeOnIce    || "",
+        shooterTimeOnIceSinceFaceoff: d.shooterTimeOnIceSinceFaceoff || "",
+        lastEventCategory:  d.lastEventCategory   || "",
+        lastEventTeam:      d.lastEventTeam       || "",
+        lastEventXCord:     safeNumber(d.lastEventXCord),
+        lastEventYCord:     safeNumber(d.lastEventYCord),
+        lastEventDistance:  safeNumber(d.lastEventDistance),
+        lastEventAngle:     safeNumber(d.lastEventAngle),
+        shooterName:        d.shooterName         || "",
+        goalieName:         d.goalieName          || "",
+        shooterLeftRight:   d.shooterLeftRight    || "",
+        shooterPosition:    d.shooterPosition     || "",
+        shooterTeamCode:    d.shooterTeam         || "",
+        goalieTeamCode:     d.goalieTeam          || "",
+        onIceSituation:     d.onIceSituation      || "",
+        shotOutcome:        d.shotOutcome         || "",
+        shotOnEmptyNet:     d.shotOnEmptyNet      || "",
+        shotRebound:        d.shotRebound         || "",
+        shotRush:           d.shotRush            || "",
+        shotWasOnGoal:      d.shotWasOnGoal       || "",
+        shotGoalieFroze:    d.shotGoalieFroze     || "",
+        shotPlayStopped:    d.shotPlayStopped     || "",
+        shotGeneratedRebound: d.shotGeneratedRebound || "",
+        offWing:            d.offWing             || "",
+        shotDistance:       safeNumber(d.shotDistance),
+        xGoal:              safeNumber(d.xGoal),
+        xFroze:             safeNumber(d.xFroze),
+        xRebound:           safeNumber(d.xRebound),
+        xPlayStopped:       safeNumber(d.xPlayStopped),
+        xShotWasOnGoal:     safeNumber(d.xShotWasOnGoal),
+
+        // ⚠️ MORE CULPRITS (integers):
+        homeTeamGoals:      safeNumber(d.homeTeamGoals),
+        awayTeamGoals:      safeNumber(d.awayTeamGoals),
+
+        shooterIsHomeTeam:  d.shooterIsHomeTeam   || "",
+        shootingTeamWon:    d.shootingTeamWon     || "",
+        speedFromLastEvent: d.speedFromLastEvent  || "",
+        timeDifferenceSinceChange: d.timeDifferenceSinceChange || "",
+        averageRestDifference:     d.averageRestDifference     || "",
+
+        // ⚠️ RANK FIELDS – definitely integers:
+        ShooterSeasonRank:   safeNumber(d.ShooterSeasonRank),
+        shooterSeasonGoals:  safeNumber(d.shooterSeasonGoals),
+        shooterShootingPct:  safeNumber(d.shooterShootingPct),
+        goalieSeasonRank:    safeNumber(d.goalieSeasonRank),
+        goalieSeasonWins:    safeNumber(d.goalieSeasonWins),
+        goalieSavePct:       safeNumber(d.goalieSavePct),
+        shooterTeamSeasonRank: safeNumber(d.shooterTeamSeasonRank),
+        goalieTeamSeasonRank:  safeNumber(d.goalieTeamSeasonRank),
+    };
+}
+
+// --- THE NEW loadShotData FUNCTION (reads Parquet) ---
 async function loadShotData({ onProgress } = {}) {
     const seasons = Array.from({ length: 19 }, (_, i) => 2007 + i);
-    const files   = seasons.map(s => `data/shots_${s}.csv`);
+    const files = seasons.map(s => `data/shots_${s}.parquet`); // 👈 Changed extension
 
-    const responses = await Promise.allSettled(
-        files.map(f => fetch(f).then(r => {
+    // 1. Fetch ALL Parquet files in parallel (as ArrayBuffers)
+    const fetchPromises = files.map(f => 
+        fetch(f).then(r => {
             if (!r.ok) throw new Error(`HTTP ${r.status}`);
-            return r.text();
-        }))
+            return r.arrayBuffer(); // Get binary data
+        })
     );
+    const results = await Promise.allSettled(fetchPromises);
 
-    let allData = [];
+    // 2. Process them sequentially for predictable progress
+    let allMappedData = [];
+
     for (let i = 0; i < files.length; i++) {
-        const res = responses[i];
-        if (res.status !== "fulfilled") continue;
-        const csvText = res.value;
-        if (!csvText?.trim()) continue;
+        const res = results[i];
+        if (res.status !== "fulfilled") {
+            console.warn(`Skipping ${files[i]}:`, res.reason);
+            continue;
+        }
 
-        const data = d3.csvParse(csvText);
-        allData = allData.concat(data);
+        const arrayBuffer = res.value;
 
-        shotData = allData.map(d => ({
-            coordX:  +d.coordX  || +d.arenaAdjustedXCordAbs || 0,
-            coordY:  +d.coordY  || +d.arenaAdjustedYCord    || 0,
-            isGoal:  parseBool(d.goal),
-            goal:    d.goal,
-            shotType:           d.shotType            || "",
-            season:             String(d.season || "").trim(),
-            isPlayoffGame:      parseBool(d.isPlayoffGame),
-            period:             +d.period || 0,
-            time:               d.time                || "",
-            timeUntilNextEvent: d.timeUntilNextEvent  || "",
-            timeSinceLastEvent: d.timeSinceLastEvent  || "",
-            timeSinceFaceoff:   d.timeSinceFaceoff    || "",
-            shooterTimeOnIce:   d.shooterTimeOnIce    || "",
-            shooterTimeOnIceSinceFaceoff: d.shooterTimeOnIceSinceFaceoff || "",
-            lastEventCategory:  d.lastEventCategory   || "",
-            lastEventTeam:      d.lastEventTeam       || "",
-            lastEventXCord:     +d.lastEventXCord     || 0,
-            lastEventYCord:     +d.lastEventYCord     || 0,
-            lastEventDistance:  +d.lastEventDistance  || 0,
-            lastEventAngle:     +d.lastEventAngle     || 0,
-            shooterName:        d.shooterName         || "",
-            goalieName:         d.goalieName          || "",
-            shooterLeftRight:   d.shooterLeftRight    || "",
-            shooterPosition:    d.shooterPosition     || "",
-            shooterTeamCode:    d.shooterTeam         || "",
-            goalieTeamCode:     d.goalieTeam          || "",
-            onIceSituation:     d.onIceSituation      || "",
-            shotOutcome:        d.shotOutcome         || "",
-            shotOnEmptyNet:     d.shotOnEmptyNet      || "",
-            shotRebound:        d.shotRebound         || "",
-            shotRush:           d.shotRush            || "",
-            shotWasOnGoal:      d.shotWasOnGoal       || "",
-            shotGoalieFroze:    d.shotGoalieFroze     || "",
-            shotPlayStopped:    d.shotPlayStopped     || "",
-            shotGeneratedRebound: d.shotGeneratedRebound || "",
-            offWing:            d.offWing             || "",
-            shotDistance:       +d.shotDistance       || 0,
-            xGoal:              +d.xGoal              || 0,
-            xFroze:             +d.xFroze             || 0,
-            xRebound:           +d.xRebound           || 0,
-            xPlayStopped:       +d.xPlayStopped       || 0,
-            xShotWasOnGoal:     +d.xShotWasOnGoal     || 0,
-            homeTeamGoals:      +d.homeTeamGoals      || 0,
-            awayTeamGoals:      +d.awayTeamGoals      || 0,
-            shooterIsHomeTeam:  d.shooterIsHomeTeam   || "",
-            shootingTeamWon:    d.shootingTeamWon     || "",
-            speedFromLastEvent: d.speedFromLastEvent  || "",
-            timeDifferenceSinceChange: d.timeDifferenceSinceChange || "",
-            averageRestDifference:     d.averageRestDifference     || "",
-            ShooterSeasonRank:   d.ShooterSeasonRank    || "",
-            shooterSeasonGoals:  d.shooterSeasonGoals   || "",
-            shooterShootingPct:  d.shooterShootingPct   || "",
-            goalieSeasonRank:    d.goalieSeasonRank     || "",
-            goalieSeasonWins:    d.goalieSeasonWins     || "",
-            goalieSavePct:       d.goalieSavePct        || "",
-            shooterTeamSeasonRank: d.shooterTeamSeasonRank || "",
-            goalieTeamSeasonRank:  d.goalieTeamSeasonRank  || "",
-        }));
+        // 3. Parse the Parquet binary into an array of row objects
+        //    (hyparquet returns plain objects with column names as keys)
+        let rows = [];
+        try {
+            rows = await parquetReadObjects({ file: arrayBuffer });
+        } catch (err) {
+            console.warn(`Failed to parse ${files[i]}:`, err);
+            continue;
+        }
 
-        if (onProgress) onProgress(i + 1, files.length, shotData);
+        if (!rows || rows.length === 0) continue;
+
+        // 4. Map the Parquet rows to your exact schema
+        const mappedChunk = rows.map(mapRowToShot);
+        allMappedData = allMappedData.concat(mappedChunk);
+
+        // 5. Update progress (passes the full dataset so far)
+        if (onProgress) {
+            onProgress(i + 1, files.length, allMappedData);
+        }
+
+        // Yield to the event loop to keep UI responsive
         await new Promise(r => setTimeout(r, 0));
     }
-    return allData.length > 0;
+
+    // 6. Assign to your global variable (if you have one)
+    shotData = allMappedData; // or just `shotData = allMappedData;`
+
+    return allMappedData.length > 0;
 }
 
 // ──────────────── SEASON METRICS ────────────────
@@ -877,12 +928,15 @@ async function init() {
             const pct = Math.round((done/total)*100);
             const el = overlay?.querySelector(".loading-text");
             if (el) el.textContent = `Cargando datos… ${pct}%`;
-            if (shotData.length) renderHeroChart();
         }
     });
 
     if (overlay) overlay.classList.remove("show");
     if (!loaded) return;
+    console.log("Sample shotData[0]:", shotData[0]);
+    console.log("Unique lastEventCategory values:", 
+        [...new Set(shotData.map(d => d.lastEventCategory).filter(Boolean))]
+    );
 
     populateFilters();
     setupHeroListeners();
